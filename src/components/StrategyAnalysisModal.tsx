@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { StrategyWithOrders } from '../types';
 import { HorizontalPriceScaleBar } from './HorizontalPriceScaleBar';
 import { 
@@ -20,7 +21,8 @@ import {
   Flame, 
   Sparkles,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Maximize2
 } from 'lucide-react';
 
 interface StrategyAnalysisModalProps {
@@ -40,6 +42,26 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
   const [analysis, setAnalysis] = useState<StrategyAnalysisResult | null>(null);
   const [isUpdatingSheet, setIsUpdatingSheet] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  // Disable body scroll when modal is open and handle Esc key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   const runAnalysis = async () => {
     setLoading(true);
@@ -90,20 +112,23 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
   const symbolClean = strategy.symbol.replace('USDT', '');
   const isLong = strategy.type === 'LONG';
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-fade-in">
+  const modalContent = (
+    <div 
+      className="fixed inset-0 z-[99999] w-screen h-screen bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6"
+      onClick={onClose}
+    >
       <div 
-        className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-6xl h-[95vh] sm:h-[92vh] shadow-2xl shadow-black/80 flex flex-col overflow-hidden animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="px-5 py-4 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between gap-4">
+        <div className="px-5 py-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-slate-950 shadow-lg shadow-cyan-500/20 font-black">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-slate-950 shadow-lg shadow-cyan-500/20 font-black shrink-0">
               <Activity className="w-5 h-5 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg sm:text-xl font-extrabold text-white font-mono tracking-tight">
                   Analizar: {symbolClean}/USDT
                 </h2>
@@ -112,11 +137,11 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
                 }`}>
                   {strategy.type}
                 </span>
-                <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                <span className="text-xs text-cyan-300/80 font-mono hidden sm:inline px-2 py-0.5 bg-slate-900 rounded border border-slate-800">
                   {strategy.strategyName}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono">
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
                 Verificación temporal histórica vs. tiempo actual y escala de precios
               </p>
             </div>
@@ -127,13 +152,14 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
               onClick={runAnalysis}
               disabled={loading}
               title="Volver a analizar"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
             >
               <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              title="Cerrar modal (Esc)"
+              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -141,7 +167,7 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
         </div>
 
         {/* Modal Scrollable Body */}
-        <div className="p-5 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
           
           {/* SECTION 1: Barra Horizontal de Precios */}
           <div className="space-y-2">
@@ -150,8 +176,8 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
                 <Target className="w-4 h-4" />
                 1. Barra Horizontal de Precios en Escala Continua
               </h3>
-              <span className="text-[11px] font-mono text-slate-400">
-                Live: ${strategy.currentPrice?.toLocaleString() || strategy.entryPrice}
+              <span className="text-xs font-mono text-slate-300 bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
+                Precio Live: <strong className="text-cyan-400 font-bold">${strategy.currentPrice?.toLocaleString() || strategy.entryPrice}</strong>
               </span>
             </div>
             
@@ -181,16 +207,16 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
               <div className="space-y-4">
                 
                 {/* Status Hero Card */}
-                <div className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg ${analysis.statusColor}`}>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2.5">
+                <div className={`p-4 sm:p-5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg ${analysis.statusColor}`}>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
                       <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
                         Estado Dictaminado:
                       </span>
                       <span className="text-base sm:text-lg font-black font-mono uppercase px-3 py-0.5 rounded-lg bg-black/40 border border-white/20">
                         {analysis.statusLabel}
                       </span>
-                      <span className="text-xs font-mono text-slate-400">
+                      <span className="text-xs font-mono text-slate-300">
                         (Hoja "Ordenes" Celda <strong className="text-white underline">{analysis.sheetCellTarget}</strong>)
                       </span>
                     </div>
@@ -322,7 +348,7 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-5 py-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
+        <div className="px-5 py-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between shrink-0">
           <div className="text-[11px] font-mono text-slate-500">
             Reglas automáticas: Si tocó SL → "Invalidado" | Si entre E3 y E1 → "ACTIVA" | Si tocó TP1..3 → "INVALIDADO TARDE"
           </div>
@@ -337,4 +363,6 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : null;
 };
