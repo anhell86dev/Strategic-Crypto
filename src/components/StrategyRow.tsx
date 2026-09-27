@@ -59,11 +59,6 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
   });
 
   const isTpHit = hitTps.length > 0;
-  const highestHitTp = hitTps.length > 0
-    ? (isLong
-        ? [...hitTps].sort((a, b) => b.targetPrice - a.targetPrice)[0]
-        : [...hitTps].sort((a, b) => a.targetPrice - b.targetPrice)[0])
-    : null;
 
   // Real-time TP crossing detection & price flash
   useEffect(() => {
@@ -101,18 +96,6 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
     prevPriceRef.current = currentPrice;
   }, [currentPrice, strategy.orders, isLong]);
 
-  const formatPrice = (val?: number) => {
-    if (val === undefined || isNaN(val)) return '---';
-    if (val >= 1000) {
-      return `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    } else if (val >= 1) {
-      return `$${val.toFixed(2)}`;
-    } else if (val >= 0.01) {
-      return `$${val.toFixed(4)}`;
-    }
-    return `$${val.toFixed(6)}`;
-  };
-
   const copyEntry = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigator.clipboard.writeText(`${strategy.symbol} ${strategy.type} @ $${strategy.entryPrice} | SL: $${strategy.stopLoss} | R:B: ${rr.formattedRatio}`);
@@ -122,6 +105,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
 
   const isAlert = strategy.isAlertZone;
   const symbolClean = strategy.symbol.replace('USDT', '');
+  const displayStrategyName = strategy.strategyName || strategy.coinName || symbolClean;
 
   return (
     <div className={`border-b transition-all duration-300 relative ${
@@ -139,7 +123,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
         className="px-4 sm:px-6 py-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4 cursor-pointer select-none"
       >
         
-        {/* Left Elements: [1. Nombre Estrategia] + [2. TIPO] + [3. Riesgo Beneficio] + [4. Precio Actual] */}
+        {/* Left Section: [1. Nombre Estrategia & TIPO abajo] + [2. Riesgo Beneficio] */}
         <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 sm:gap-6 shrink-0">
           
           {/* Multi-Selection Checkbox & Rank */}
@@ -177,33 +161,38 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             </div>
           </div>
 
-          {/* 1. Nombre Estrategia */}
-          <div className="w-40 sm:w-48 shrink-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-black text-base sm:text-lg font-mono text-white tracking-tight">
-                {symbolClean}
+          {/* 1. Nombre Estrategia (Valor exacto de la Celda A de Ordenes) con TIPO como etiqueta abajo */}
+          <div className="w-56 sm:w-64 shrink-0">
+            {/* Nombre de Estrategia extraído de la celda A de Ordenes */}
+            <div className="font-extrabold text-sm sm:text-base font-mono text-cyan-300 tracking-tight truncate leading-snug" title={displayStrategyName}>
+              {displayStrategyName}
+            </div>
+
+            {/* Sublínea con Activo (Símbolo) y TIPO (LONG / SHORT) como etiqueta abajo */}
+            <div className="mt-1.5 flex items-center flex-wrap gap-1.5">
+              <span className="font-bold text-[11px] text-white font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-700/80 shadow-xs">
+                {symbolClean}/USDT
               </span>
-              <span className="text-xs text-slate-500 font-normal">/USDT</span>
-            </div>
-            <div className="text-xs text-slate-400 font-sans truncate mt-0.5">
-              {strategy.coinName || symbolClean}
-              {strategy.category && <span className="text-slate-500"> · {strategy.category}</span>}
+
+              {/* TIPO (LONG / SHORT) como etiqueta */}
+              <span className={`inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-0.5 rounded-md font-mono tracking-wider ${
+                isLong
+                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/80 shadow-xs'
+                  : 'bg-rose-950 text-rose-300 border border-rose-700/80 shadow-xs'
+              }`}>
+                {isLong ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                {strategy.type}
+              </span>
+
+              {strategy.leverage && (
+                <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
+                  {strategy.leverage}x
+                </span>
+              )}
             </div>
           </div>
 
-          {/* 2. TIPO (Etiqueta LONG / SHORT) */}
-          <div className="shrink-0">
-            <span className={`inline-flex items-center gap-1 text-xs font-black px-3 py-1 rounded-lg font-mono tracking-wider ${
-              isLong
-                ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/80 shadow-xs'
-                : 'bg-rose-950 text-rose-300 border border-rose-700/80 shadow-xs'
-            }`}>
-              {isLong ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
-              {strategy.type}
-            </span>
-          </div>
-
-          {/* 3. Riesgo Beneficio (Columna) */}
+          {/* 2. Riesgo Beneficio (Columna) */}
           <div className="w-28 sm:w-32 shrink-0">
             <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5 font-semibold">
               Riesgo Beneficio
@@ -218,36 +207,15 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
                   : 'bg-emerald-950 text-emerald-300 border-emerald-700/80'
               }`}
             >
-              <Scale className="w-3 h-3 text-cyan-400" />
+              <Scale className="w-3.5 h-3.5 text-cyan-400" />
               <span>{rr.formattedRatio}</span>
             </span>
           </div>
 
-          {/* 4. Precio Actual */}
-          <div className={`w-32 sm:w-36 shrink-0 p-1 rounded-lg transition-colors ${flashClass}`}>
-            <span className="text-[10px] uppercase font-mono text-slate-400 flex items-center gap-1 mb-0.5 font-semibold">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping-fast absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-              </span>
-              Precio Actual
-            </span>
-            <div className="font-mono font-black text-sm sm:text-base text-white tabular-nums">
-              {formatPrice(strategy.currentPrice)}
-            </div>
-            {strategy.priceChangePercent24h !== undefined && (
-              <span className={`text-[10px] font-mono font-bold block ${
-                strategy.priceChangePercent24h >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}>
-                {strategy.priceChangePercent24h >= 0 ? '+' : ''}{strategy.priceChangePercent24h.toFixed(2)}% (24h)
-              </span>
-            )}
-          </div>
-
         </div>
 
-        {/* 5. Entrada, SL y Take Profits representados en Línea de Precios Horizontal */}
-        <div className="flex-1 min-w-[280px] lg:min-w-[400px] px-2">
+        {/* 3. Escala de Precios Horizontal con Entrada, SL, Precio Live y Take Profits */}
+        <div className="flex-1 min-w-[300px] lg:min-w-[450px] px-2">
           <HorizontalPriceTrack
             symbol={strategy.symbol}
             type={strategy.type}

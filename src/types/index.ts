@@ -20,6 +20,7 @@ export interface Strategy {
   id: number;
   symbol: string; // e.g. "BTCUSDT"
   coinName: string; // e.g. "Bitcoin"
+  strategyName?: string; // from Column A of Ordenes
   type: 'LONG' | 'SHORT';
   entryPrice: number;
   stopLoss: number;

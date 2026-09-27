@@ -321,6 +321,7 @@ export class SheetsService {
     const headerRow = rows[0].map(h => (h || '').toString().toLowerCase().trim());
     
     // Find column positions dynamically
+    let stratNameCol = 0; // Default to Column A (Cell A)
     let idCol = -1;
     let symbolCol = -1;
     let typeCol = -1;
@@ -337,9 +338,10 @@ export class SheetsService {
     const tpCols: { type: string; colIndex: number }[] = [];
 
     headerRow.forEach((h, idx) => {
-      if (/^id$|^#$|^n[uú]m|^c[oó]digo/i.test(h)) idCol = idx;
-      else if (/s[ií]mbol|symbol|ticker|moneda|par|asset|pair/i.test(h) && symbolCol === -1) symbolCol = idx;
-      else if (/tipo|type|dir|direcci[oó]n|side|posici[oó]n/i.test(h) && typeCol === -1) typeCol = idx;
+      if (/nombre.*estrategia|^nombre$|^name$/i.test(h)) stratNameCol = idx;
+      else if (/^id$|^#$|^n[uú]m|^c[oó]digo/i.test(h)) idCol = idx;
+      else if (/^activo$|s[ií]mbol|symbol|ticker|moneda|par|asset|pair/i.test(h) && symbolCol === -1) symbolCol = idx;
+      else if (/^tipo$|type|dir|direcci[oó]n|side|posici[oó]n/i.test(h) && typeCol === -1) typeCol = idx;
       else if (/entrad|entry|precio.*entrad|buy.*price|precio\s*compra/i.test(h) && entryCol === -1) entryCol = idx;
       else if (/stop.*loss|sl|invalida|stop/i.test(h) && slCol === -1) slCol = idx;
       else if (/fecha|date|timestamp/i.test(h) && dateCol === -1) dateCol = idx;
@@ -358,15 +360,16 @@ export class SheetsService {
     });
 
     // Fallback to default standard column indexes if header didn't match
-    if (symbolCol === -1) symbolCol = 1;
-    if (typeCol === -1) typeCol = 2;
+    if (symbolCol === -1) symbolCol = 2; // Column C is 'Activo'
+    if (typeCol === -1) typeCol = 8; // Column I is 'Tipo'
     if (entryCol === -1) entryCol = 3;
     if (slCol === -1) slCol = 4;
-    if (dateCol === -1) dateCol = 5;
+    if (dateCol === -1) dateCol = 1; // Column B is 'Fecha'
+    if (leverageCol === -1) leverageCol = 6; // Column G is 'Apalancamiento'
     if (statusCol === -1) statusCol = 6;
-    if (categoryCol === -1) categoryCol = 7;
-    if (notesCol === -1) notesCol = 8;
-    if (thresholdCol === -1) thresholdCol = 9;
+    if (categoryCol === -1) categoryCol = 9; // Column J is 'Estrategia' description
+    if (notesCol === -1) notesCol = 10;
+    if (thresholdCol === -1) thresholdCol = 11;
 
     const dataRows = rows.slice(1);
     const strategies: Strategy[] = [];
@@ -406,6 +409,10 @@ export class SheetsService {
       const category = (categoryCol !== -1 && row[categoryCol]) ? row[categoryCol].toString().trim() : undefined;
       const notes = (notesCol !== -1 && row[notesCol]) ? row[notesCol].toString().trim() : undefined;
 
+      // Extract Strategy Name directly from Cell A (Column 0 / stratNameCol) of Ordenes sheet
+      const rawCellA = ((stratNameCol !== -1 && row[stratNameCol]) || row[0] || '').toString().trim();
+      const strategyName = rawCellA.length > 0 ? rawCellA : (symbol.replace('USDT', ''));
+
       const rawLev = (leverageCol !== -1 && row[leverageCol]) ? parseFloat(row[leverageCol].toString().replace(/x/i, '')) : 5;
       const leverage = (!isNaN(rawLev) && rawLev > 0) ? rawLev : 5;
 
@@ -416,6 +423,7 @@ export class SheetsService {
         id: stratId,
         symbol,
         coinName: symbol.replace('USDT', ''),
+        strategyName,
         type,
         entryPrice,
         stopLoss,
@@ -497,6 +505,7 @@ export class SheetsService {
         id,
         symbol: cleanSymbol,
         coinName: cleanSymbol.replace('USDT', ''),
+        strategyName: item.strategyName || item.estrategia || item.name || item.strategy || cleanSymbol.replace('USDT', ''),
         type,
         entryPrice: !isNaN(entryPrice) ? entryPrice : 0,
         stopLoss: !isNaN(stopLoss) ? stopLoss : 0,
