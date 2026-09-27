@@ -5,19 +5,8 @@ import {
   Target, 
   Activity, 
   AlertTriangle, 
-  TrendingUp, 
-  TrendingDown, 
   Clock, 
-  Layers, 
-  ShieldAlert,
-  Flame,
-  Info,
-  GitCommit,
-  ArrowDown,
-  ArrowUp,
-  GitBranch,
-  SlidersHorizontal,
-  ChevronDown
+  GitBranch
 } from 'lucide-react';
 
 interface HorizontalPriceScaleBarProps {
@@ -106,9 +95,8 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   const isLong = type === 'LONG';
   const livePrice = currentPrice || entryPrice;
 
-  // Visual options state
+  // Toggle for MTF connectors
   const [showConnectors, setShowConnectors] = useState<boolean>(true);
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 'desc' = Mayor a menor (1D -> 5M)
 
   // Real-time multi-timeframe candle data state
   const [tfData, setTfData] = useState(() => {
@@ -195,27 +183,25 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   const tp2Pos = getPercentPos(tp2);
   const tp3Pos = getPercentPos(tp3);
 
-  // Timeframe Rows with assigned duration for exact hierarchical ordering
+  // Timeframe Rows strictly ordered from top to bottom as requested:
+  // 1. Horas transcurridas (PUB)
+  // 2. 5M
+  // 3. 15M
+  // 4. 1H
+  // 5. 4H
+  // 6. DIARIO
+  // (2H and 3H removed)
   const timeframesList = useMemo(() => {
     const candles = tfData?.candles || {};
-    const rawList = [
-      { ...(candles['1d'] || { timeframe: '1d', label: 'DIARIO', timeStr: 'Hoy', open: livePrice * 1.0440, close: livePrice, changePercent: -4.40 }), durationMinutes: 1440 },
+    return [
       pubCandle,
-      { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: livePrice * 1.0095, close: livePrice, changePercent: -0.95 }), durationMinutes: 240 },
-      { ...(candles['3h'] || { timeframe: '3h', label: '3H', timeStr: '22:00', open: livePrice * 1.0296, close: livePrice, changePercent: -2.96 }), durationMinutes: 180 },
-      { ...(candles['2h'] || { timeframe: '2h', label: '2H', timeStr: '23:00', open: livePrice * 0.9731, close: livePrice, changePercent: 2.69 }), durationMinutes: 120 },
-      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: livePrice * 0.9984, close: livePrice, changePercent: 0.16 }), durationMinutes: 60 },
+      { ...(candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: livePrice * 0.9985, close: livePrice, changePercent: 0.15 }), durationMinutes: 5 },
       { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: livePrice * 0.9997, close: livePrice, changePercent: 0.03 }), durationMinutes: 15 },
-      { ...(candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: livePrice * 0.9985, close: livePrice, changePercent: 0.15 }), durationMinutes: 5 }
+      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: livePrice * 0.9984, close: livePrice, changePercent: 0.16 }), durationMinutes: 60 },
+      { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: livePrice * 1.0095, close: livePrice, changePercent: -0.95 }), durationMinutes: 240 },
+      { ...(candles['1d'] || { timeframe: '1d', label: 'DIARIO', timeStr: 'Hoy', open: livePrice * 1.0440, close: livePrice, changePercent: -4.40 }), durationMinutes: 1440 }
     ];
-
-    // Sort according to user preference (Default: Descending = Mayor a Menor)
-    return rawList.sort((a, b) => {
-      return sortOrder === 'desc' 
-        ? b.durationMinutes - a.durationMinutes 
-        : a.durationMinutes - b.durationMinutes;
-    });
-  }, [tfData, livePrice, pubCandle, sortOrder]);
+  }, [tfData, livePrice, pubCandle]);
 
   // Compute connections: The close of the higher timeframe connects to the open of the next lower timeframe
   const connections = useMemo(() => {
@@ -230,8 +216,6 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
       y2: number;
       higherLabel: string;
       lowerLabel: string;
-      higherClosePrice: number;
-      lowerOpenPrice: number;
     }[] = [];
 
     const totalRows = timeframesList.length;
@@ -240,8 +224,11 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
       const current = timeframesList[i];
       const next = timeframesList[i + 1];
 
-      // Identify which one is higher in duration
-      const isCurrentHigher = current.durationMinutes >= next.durationMinutes;
+      const durCurrent = (current as any).durationMinutes || (current.timeframe === 'pub' ? pubInfo.hours * 60 : 0);
+      const durNext = (next as any).durationMinutes || (next.timeframe === 'pub' ? pubInfo.hours * 60 : 0);
+
+      // Determine which one is higher in duration
+      const isCurrentHigher = durCurrent >= durNext;
       const higherTF = isCurrentHigher ? current : next;
       const lowerTF = isCurrentHigher ? next : current;
       const higherIndex = isCurrentHigher ? i : i + 1;
@@ -262,14 +249,12 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
         x2,
         y2,
         higherLabel: higherTF.label,
-        lowerLabel: lowerTF.label,
-        higherClosePrice: higherTF.close,
-        lowerOpenPrice: lowerTF.open
+        lowerLabel: lowerTF.label
       });
     }
 
     return conns;
-  }, [timeframesList, showConnectors, minScale, scaleSpan]);
+  }, [timeframesList, showConnectors, minScale, scaleSpan, pubInfo.hours]);
 
   // ATR metrics
   const atrVal = tfData?.atr14 || (livePrice * 0.02);
@@ -322,7 +307,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           </div>
         </div>
 
-        {/* Controles de Unión y Orden de Temporalidades */}
+        {/* Controles de Unión MTF */}
         <div className="flex items-center flex-wrap gap-2.5 font-mono text-xs">
           
           {/* Toggle Unir Recorridos */}
@@ -337,16 +322,6 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           >
             <GitBranch className="w-3.5 h-3.5" />
             <span>Uniones MTF: {showConnectors ? 'ON' : 'OFF'}</span>
-          </button>
-
-          {/* Selector de Orden (Mayor ➔ Menor / Menor ➔ Mayor) */}
-          <button
-            onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-            title="Alternar orden jerárquico de temporalidades"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer text-xs"
-          >
-            {sortOrder === 'desc' ? <ArrowDown className="w-3.5 h-3.5 text-cyan-400" /> : <ArrowUp className="w-3.5 h-3.5 text-amber-400" />}
-            <span>{sortOrder === 'desc' ? '1D ➔ 5M (Mayor a Menor)' : '5M ➔ 1D (Menor a Mayor)'}</span>
           </button>
 
           {/* Warning badge */}
@@ -377,7 +352,10 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shadow-sm" /> Apertura (O)
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-sm" /> Cierre (C)
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-sm" /> Cierre Alcista (C)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block shadow-sm" /> Cierre Bajista (C)
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-sm" /> Publicación (PUB)
@@ -492,7 +470,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           {/* Contenedor que agrupa etiquetas y pistas */}
           <div className="flex gap-2 sm:gap-3">
             
-            {/* Columna Izquierda: Etiquetas de Temporalidad */}
+            {/* Columna Izquierda: Etiquetas de Temporalidad en el orden exacto */}
             <div className="w-32 sm:w-36 shrink-0 flex flex-col justify-between py-0.5 space-y-2">
               {timeframesList.map((tf) => {
                 const isUp = tf.changePercent >= 0;
@@ -525,7 +503,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
               })}
             </div>
 
-            {/* Columna Derecha: Pistas Horizontales con Capa SVG de Uniones de Precios */}
+            {/* Columna Derecha: Pistas Horizontales con Capa SVG Limpia de Uniones */}
             <div className="flex-1 relative flex flex-col justify-between py-0.5 space-y-2">
               
               {/* Guía Vertical Continua: ENTRADA (E1) */}
@@ -559,13 +537,6 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                       <stop offset="50%" stopColor="#818cf8" stopOpacity="0.85" />
                       <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.8" />
                     </linearGradient>
-                    <filter id="neonBlur" x="-20%" y="-20%" width="140%" height="140%">
-                      <feGaussianBlur stdDeviation="0.8" result="blur" />
-                      <feMerge>
-                        <feMergeNode in="blur" />
-                        <feMergeNode in="SourceGraphic" />
-                      </feMerge>
-                    </filter>
                   </defs>
 
                   {connections.map((conn, idx) => {
@@ -575,44 +546,22 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
                     return (
                       <g key={`conn-${idx}`}>
-                        {/* Glow halo */}
+                        {/* Subtle glow backdrop */}
                         <path
                           d={pathD}
                           fill="none"
-                          stroke="rgba(56, 189, 248, 0.25)"
-                          strokeWidth="3.5"
+                          stroke="rgba(56, 189, 248, 0.2)"
+                          strokeWidth="3"
                           vectorEffect="non-scaling-stroke"
                         />
 
-                        {/* Main connecting dashed line */}
+                        {/* Clean dashed connector line */}
                         <path
                           d={pathD}
                           fill="none"
                           stroke="url(#connectorGlow)"
-                          strokeWidth="2"
+                          strokeWidth="1.5"
                           strokeDasharray="4 3"
-                          vectorEffect="non-scaling-stroke"
-                        />
-
-                        {/* Anchor Node: Cierre de la Mayor */}
-                        <circle
-                          cx={conn.x1}
-                          cy={conn.y1}
-                          r="3"
-                          fill="#38bdf8"
-                          stroke="#020617"
-                          strokeWidth="1.5"
-                          vectorEffect="non-scaling-stroke"
-                        />
-
-                        {/* Anchor Node: Apertura de la Menor */}
-                        <circle
-                          cx={conn.x2}
-                          cy={conn.y2}
-                          r="3"
-                          fill="#fbbf24"
-                          stroke="#020617"
-                          strokeWidth="1.5"
                           vectorEffect="non-scaling-stroke"
                         />
                       </g>
@@ -621,7 +570,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                 </svg>
               )}
 
-              {/* Renderizado de cada pista horizontal */}
+              {/* Renderizado de cada pista horizontal con círculos nativos perfectamente redondos */}
               {timeframesList.map((tf) => {
                 const isUp = tf.changePercent >= 0;
                 const openPos = getPercentPos(tf.open);
@@ -649,27 +598,23 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                       style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
                     />
 
-                    {/* Punto Apertura (O) */}
+                    {/* Punto Apertura: Círculo limpio redondo */}
                     <div 
-                      className={`absolute w-3 h-3 rounded-full border border-slate-950 z-20 shadow-sm flex items-center justify-center text-[7px] font-black text-slate-950 ${
+                      className={`absolute w-3 h-3 rounded-full border border-slate-950 z-20 shadow-xs ${
                         isPub ? 'bg-cyan-300 ring-2 ring-cyan-500/50' : 'bg-amber-400'
                       }`}
                       style={{ left: `${openPos}%`, transform: 'translateX(-50%)' }}
-                      title={`${tf.label} Apertura (O): ${formatPrice(tf.open)}`}
-                    >
-                      O
-                    </div>
+                      title={`${tf.label} Apertura: ${formatPrice(tf.open)}`}
+                    />
 
-                    {/* Punto Cierre (C) */}
+                    {/* Punto Cierre: Círculo limpio redondo */}
                     <div 
-                      className={`absolute w-3.5 h-3.5 rounded-full border border-slate-950 z-20 flex items-center justify-center text-[7px] font-black text-slate-950 shadow-sm ${
+                      className={`absolute w-3 h-3 rounded-full border border-slate-950 z-20 shadow-sm ${
                         isUp ? 'bg-emerald-400' : 'bg-rose-400'
                       }`}
                       style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
-                      title={`${tf.label} Cierre (C): ${formatPrice(tf.close)}`}
-                    >
-                      C
-                    </div>
+                      title={`${tf.label} Cierre: ${formatPrice(tf.close)}`}
+                    />
 
                   </div>
                 );
