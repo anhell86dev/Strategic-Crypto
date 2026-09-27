@@ -161,23 +161,15 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   const dLow = dailyCandle?.low || Math.min(dOpen, dClose, livePrice * 0.955);
   const dChange = dOpen > 0 ? ((dClose - dOpen) / dOpen) * 100 : 0;
 
-  // LA ESCALA LA GOBIERNA EL DIARIO: Los límites de la barra horizontal abarcan toda la excursión diaria
-  const { minScale, maxScale, scaleSpan } = useMemo(() => {
-    const min = Math.min(dLow, stopLoss, entryPrice, livePrice);
-    const max = Math.max(dHigh, stopLoss, entryPrice, livePrice, tp1, tp2, tp3);
-    const padding = (max - min) * 0.02 || min * 0.01;
+  // LA ESCALA DE REFERENCIA ES ESTRICTAMENTE EL MÁXIMO Y MÍNIMO DE LA TEMPORALIDAD DIARIA
+  const minScale = dLow;
+  const maxScale = dHigh;
+  const scaleSpan = Math.max(0.000001, maxScale - minScale);
 
-    return {
-      minScale: Math.max(0, min - padding),
-      maxScale: max + padding,
-      scaleSpan: Math.max(0.000001, (max + padding) - (min - padding))
-    };
-  }, [dLow, dHigh, livePrice, entryPrice, stopLoss, tp1, tp2, tp3]);
-
-  // Convert price to percentage position (0% -> 100%) on the horizontal bar
+  // Convert price to percentage position (0% -> 100%) on the daily scale [dLow, dHigh]
   const getPercentPos = (price: number) => {
     const pos = ((price - minScale) / scaleSpan) * 100;
-    return Math.max(1, Math.min(99, pos));
+    return Math.max(0, Math.min(100, pos));
   };
 
   const livePos = getPercentPos(livePrice);
@@ -753,9 +745,10 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                     </div>
 
                     {/* Punto Cierre:
-                        - SOLO DIARIO Y PUB TIENEN EL CÍRCULO DE PRECIO LIVE CON PULSO
-                        - 5M, 15M, 1H, 4H TIENEN CÍRCULO ESTÁTICO DE CIERRE PASADO (SIN LIVE) */}
-                    {(isDiario || isPub) ? (
+                        - EL DIARIO TIENE EL CÍRCULO DE PRECIO LIVE CON PULSO
+                        - PUB (HORAS TRANSCURRIDAS) NO TIENE CIERRE (SOLO APERTURA Y TRAYECTORIA A LIVE)
+                        - 5M, 15M, 1H, 4H TIENEN CÍRCULO ESTÁTICO DE CIERRE PASADO */}
+                    {isDiario ? (
                       <div 
                         className="absolute w-3.5 h-3.5 z-20 flex items-center justify-center pointer-events-auto"
                         style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
@@ -763,14 +756,17 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                       >
                         {/* Pulse animado direccional LIVE */}
                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                          isPub ? 'bg-cyan-400' : (isUp ? 'bg-emerald-400' : 'bg-rose-400')
+                          isUp ? 'bg-emerald-400' : 'bg-rose-400'
                         }`} />
                         
                         {/* Círculo sólido principal LIVE */}
                         <span className={`relative inline-flex rounded-full w-3.5 h-3.5 border-2 border-slate-950 shadow-md ${
-                          isPub ? 'bg-cyan-300 ring-2 ring-cyan-500/60' : (isUp ? 'bg-emerald-400' : 'bg-rose-400')
+                          isUp ? 'bg-emerald-400' : 'bg-rose-400'
                         }`} />
                       </div>
+                    ) : isPub ? (
+                      /* PUB NO TIENE CÍRCULO DE CIERRE (SOLO APERTURA) */
+                      null
                     ) : (
                       <div 
                         className={`absolute w-3 h-3 rounded-full border border-slate-950 z-20 shadow-xs ${
@@ -781,35 +777,30 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                       />
                     )}
 
-                    {/* DATO DE CIERRE (C: $...): POSICIONADO A LA PAR DEL CÍRCULO DE CIERRE */}
-                    <div 
-                      className={`absolute top-1/2 z-25 pointer-events-none whitespace-nowrap font-mono text-[9px] font-bold flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-950/95 shadow-md ${
-                        isPub 
-                          ? 'text-cyan-300 border border-cyan-400/60 ring-1 ring-cyan-500/30' 
-                          : isDiario
-                          ? (isUp ? 'text-emerald-300 border border-emerald-500/60' : 'text-rose-300 border border-rose-500/60')
-                          : (isUp ? 'text-emerald-300 border border-emerald-500/40' : 'text-rose-300 border border-rose-500/40')
-                      }`}
-                      style={{ 
-                        left: `${closePos}%`, 
-                        transform: (closePos >= openPos && closePos < 88) || closePos < 15
-                          ? 'translate(6px, -50%)' 
-                          : 'translate(calc(-100% - 6px), -50%)' 
-                      }}
-                    >
-                      <span className={isUp ? 'text-emerald-400' : 'text-rose-400'}>C:</span>
-                      <span>{formatPrice(tf.close)}</span>
-                      {isPub && (
-                        <span className="text-[8px] bg-cyan-950 text-cyan-300 px-1 py-0.2 rounded border border-cyan-400/50 font-extrabold ml-0.5 animate-pulse">
-                          LIVE
-                        </span>
-                      )}
-                      {isDiario && (
-                        <span className="text-[8px] bg-cyan-950 text-cyan-300 px-1 py-0.2 rounded border border-cyan-400/50 font-extrabold ml-0.5">
-                          LIVE
-                        </span>
-                      )}
-                    </div>
+                    {/* DATO DE CIERRE (C: $...): POSICIONADO A LA PAR DEL CÍRCULO DE CIERRE (EXCEPTO PUB) */}
+                    {!isPub && (
+                      <div 
+                        className={`absolute top-1/2 z-25 pointer-events-none whitespace-nowrap font-mono text-[9px] font-bold flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-950/95 shadow-md ${
+                          isDiario
+                            ? (isUp ? 'text-emerald-300 border border-emerald-500/60' : 'text-rose-300 border border-rose-500/60')
+                            : (isUp ? 'text-emerald-300 border border-emerald-500/40' : 'text-rose-300 border border-rose-500/40')
+                        }`}
+                        style={{ 
+                          left: `${closePos}%`, 
+                          transform: (closePos >= openPos && closePos < 88) || closePos < 15
+                            ? 'translate(6px, -50%)' 
+                            : 'translate(calc(-100% - 6px), -50%)' 
+                        }}
+                      >
+                        <span className={isUp ? 'text-emerald-400' : 'text-rose-400'}>C:</span>
+                        <span>{formatPrice(tf.close)}</span>
+                        {isDiario && (
+                          <span className="text-[8px] bg-cyan-950 text-cyan-300 px-1 py-0.2 rounded border border-cyan-400/50 font-extrabold ml-0.5">
+                            LIVE
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                   </div>
                 );
