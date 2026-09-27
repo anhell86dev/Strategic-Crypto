@@ -26,6 +26,7 @@ import { INITIAL_STRATEGIES, INITIAL_ORDERS } from './data/initialStrategies';
 import { TradeLogService } from './services/tradeLogService';
 import { proxyService } from './services/proxyService';
 import { TradeLogEntry } from './types';
+import { BinanceFuturesTab } from './components/BinanceFuturesTab';
 
 export default function App() {
   // Raw Data State (initialized immediately with 74+ strategies from stored custom data or presets)
@@ -58,6 +59,9 @@ export default function App() {
 
   // Trade History Log State
   const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>(() => TradeLogService.getLogs());
+
+  // Primary Navigation Tab (Radar vs Binance)
+  const [activeMainTab, setActiveMainTab] = useState<'radar' | 'binance'>('radar');
 
   // Initial Sync from Google Sheets / Storage
   const loadStrategiesData = useCallback(async (cfg: SheetsConfig) => {
@@ -453,57 +457,63 @@ export default function App() {
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
         tickCount={tickCount}
+        activeTab={activeMainTab}
+        onTabChange={setActiveMainTab}
       />
 
       {/* 2. Main Body Container */}
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-5">
-        
-        {/* Leyenda Informativa */}
-        <LegendBanner alertCount={alertCount} />
+        {activeMainTab === 'binance' ? (
+          <BinanceFuturesTab onSwitchToStrategies={() => setActiveMainTab('radar')} />
+        ) : (
+          <>
+            {/* Leyenda Informativa */}
+            <LegendBanner alertCount={alertCount} />
 
-        {/* Overview KPI Stats Bar */}
-        <RadarStatsBar strategies={sortedAndFilteredStrategies} />
+            {/* Overview KPI Stats Bar */}
+            <RadarStatsBar strategies={sortedAndFilteredStrategies} />
 
-        {/* Dynamic Composable Filter Bar */}
-        <DynamicFilterBar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          activeFilters={activeFilters}
-          onAddFilter={handleAddFilter}
-          onRemoveFilter={handleRemoveFilter}
-          onClearAllFilters={handleClearAllFilters}
-          strategies={strategies as StrategyWithOrders[]}
-          totalCount={strategies.length}
-          filteredCount={sortedAndFilteredStrategies.length}
-        />
+            {/* Dynamic Composable Filter Bar */}
+            <DynamicFilterBar
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              activeFilters={activeFilters}
+              onAddFilter={handleAddFilter}
+              onRemoveFilter={handleRemoveFilter}
+              onClearAllFilters={handleClearAllFilters}
+              strategies={strategies as StrategyWithOrders[]}
+              totalCount={strategies.length}
+              filteredCount={sortedAndFilteredStrategies.length}
+            />
 
-        {/* Main Strategy Radar Table */}
-        <StrategyTable
-          strategies={sortedAndFilteredStrategies}
-          totalUnfilteredCount={strategies.length}
-          onOpenAddStrategy={() => setIsAddModalOpen(true)}
-          onClearFilters={handleClearAllFilters}
-          isFiltered={isFiltered}
-          onUpdateThreshold={handleUpdateThreshold}
-          onOpenDcaSimulator={(strat) => {
-            setSelectedStrategyForDca(strat);
-            setIsDcaModalOpen(true);
-          }}
-          selectedIds={selectedStrategyIds}
-          onToggleSelect={handleToggleSelect}
-          onToggleSelectAll={handleToggleSelectAll}
-          onOpenComparison={() => setIsComparisonOpen(true)}
-          onStatusUpdated={handleStatusUpdated}
-        />
+            {/* Main Strategy Radar Table */}
+            <StrategyTable
+              strategies={sortedAndFilteredStrategies}
+              totalUnfilteredCount={strategies.length}
+              onOpenAddStrategy={() => setIsAddModalOpen(true)}
+              onClearFilters={handleClearAllFilters}
+              isFiltered={isFiltered}
+              onUpdateThreshold={handleUpdateThreshold}
+              onOpenDcaSimulator={(strat) => {
+                setSelectedStrategyForDca(strat);
+                setIsDcaModalOpen(true);
+              }}
+              selectedIds={selectedStrategyIds}
+              onToggleSelect={handleToggleSelect}
+              onToggleSelectAll={handleToggleSelectAll}
+              onOpenComparison={() => setIsComparisonOpen(true)}
+              onStatusUpdated={handleStatusUpdated}
+            />
 
-        {/* Chronological Trade History Log (Filled Alerts Tracker) */}
-        <TradeHistoryLog
-          logs={tradeLogs}
-          onClearLogs={handleClearTradeLogs}
-          onSimulateFill={handleSimulateFill}
-          availableStrategies={sortedAndFilteredStrategies}
-        />
-
+            {/* Chronological Trade History Log (Filled Alerts Tracker) */}
+            <TradeHistoryLog
+              logs={tradeLogs}
+              onClearLogs={handleClearTradeLogs}
+              onSimulateFill={handleSimulateFill}
+              availableStrategies={sortedAndFilteredStrategies}
+            />
+          </>
+        )}
       </main>
 
       {/* 3. Modals */}

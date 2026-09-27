@@ -25,6 +25,8 @@ interface HeaderProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
   tickCount: number;
+  activeTab: 'radar' | 'binance';
+  onTabChange: (tab: 'radar' | 'binance') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,6 +40,8 @@ export const Header: React.FC<HeaderProps> = ({
   soundEnabled,
   onToggleSound,
   tickCount,
+  activeTab,
+  onTabChange,
 }) => {
   const formatTime = (d: Date | null) => {
     if (!d) return '--:--:--';
@@ -184,6 +188,42 @@ export const Header: React.FC<HeaderProps> = ({
             <Settings className="w-5 h-5" />
           </button>
         </div>
+      </div>
+
+      {/* Primary Navigation Tabs: Radar vs Binance */}
+      <div className="w-full px-4 sm:px-6 lg:px-8 bg-slate-950/90 border-t border-slate-800/60 flex items-center justify-between">
+        <nav className="flex items-center gap-2 py-2">
+          <button
+            onClick={() => onTabChange('radar')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-bold transition-all cursor-pointer ${
+              activeTab === 'radar'
+                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Radio className="w-4 h-4" />
+            <span>Radar de Estrategias</span>
+          </button>
+
+          <button
+            onClick={() => onTabChange('binance')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-bold transition-all cursor-pointer ${
+              activeTab === 'binance'
+                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <span className="text-base leading-none">⚡</span>
+            <span>Binance</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
+              activeTab === 'binance' 
+                ? 'bg-amber-950 text-amber-300' 
+                : 'bg-slate-800 text-amber-400'
+            }`}>
+              Futuros USD-M
+            </span>
+          </button>
+        </nav>
       </div>
     </header>
   );

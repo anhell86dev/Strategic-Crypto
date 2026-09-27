@@ -1,0 +1,273 @@
+import express, { Request, Response } from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = parseInt(process.env.PORT || '3000', 10);
+
+app.use(express.json());
+
+// Helper to resolve credentials from env or request headers
+function getBinanceCredentials(req: Request) {
+  const envKey = (process.env.BINANCE_API_KEY || '').trim();
+  const envSecret = (process.env.BINANCE_API_SECRET || '').trim();
+
+  const headerKey = ((req.headers['x-binance-api-key'] as string) || '').trim();
+  const headerSecret = ((req.headers['x-binance-api-secret'] as string) || '').trim();
+
+  const apiKey = envKey || headerKey;
+  const apiSecret = envSecret || headerSecret;
+  const source = envKey ? 'environment' : (headerKey ? 'proxy' : 'none');
+
+  const isTestnet = 
+    process.env.BINANCE_FUTURES_TESTNET === 'true' || 
+    req.query.testnet === 'true' ||
+    req.headers['x-binance-testnet'] === 'true';
+
+  const baseUrl = isTestnet 
+    ? 'https://testnet.binancefuture.com' 
+    : 'https://fapi.binance.com';
+
+  return { apiKey, apiSecret, source, isTestnet, baseUrl };
+}
+
+// Helper to make signed requests to Binance Futures API
+async function binanceSignedRequest(
+  endpoint: string, 
+  params: Record<string, string | number> = {}, 
+  credentials: ReturnType<typeof getBinanceCredentials>
+) {
+  const { apiKey, apiSecret, baseUrl } = credentials;
+
+  if (!apiKey || !apiSecret) {
+    throw new Error('BINANCE_API_KEY y BINANCE_API_SECRET no están configuradas.');
+  }
+
+  const timestamp = Date.now();
+  const allParams: Record<string, string | number> = {
+    ...params,
+    recvWindow: 6000,
+    timestamp
+  };
+
+  const queryString = Object.entries(allParams)
+    .map(([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`)
+    .join('&');
+
+  const signature = crypto
+    .createHmac('sha256', apiSecret)
+    .update(queryString)
+    .digest('hex');
+
+  const requestUrl = `${baseUrl}${endpoint}?${queryString}&signature=${signature}`;
+
+  const response = await fetch(requestUrl, {
+    method: 'GET',
+    headers: {
+      'X-MBX-APIKEY': apiKey,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  const data = await response.json();
+
+  if (!response.ok || data.code !== undefined && data.code < 0) {
+    const errorMsg = data.msg || `Binance API error HTTP ${response.status}`;
+    const err: any = new Error(errorMsg);
+    err.code = data.code;
+    err.status = response.status;
+    throw err;
+  }
+
+  return data;
+}
+
+// 1. GET /api/binance/status
+app.get('/api/binance/status', async (req: Request, res: Response) => {
+  const creds = getBinanceCredentials(req);
+  const start = Date.now();
+
+  try {
+    // Ping Binance Futures public server time to test connectivity and latency
+    const timeRes = await fetch(`${creds.baseUrl}/fapi/v1/time`);
+    const timeData: any = await timeRes.json();
+    const latency = Date.now() - start;
+
+    return res.json({
+      configured: Boolean(creds.apiKey && creds.apiSecret),
+      hasKey: Boolean(creds.apiKey),
+      hasSecret: Boolean(creds.apiSecret),
+      testnet: creds.isTestnet,
+      connected: true,
+      source: creds.source,
+      serverTime: timeData?.serverTime || Date.now(),
+      latencyMs: latency
+    });
+  } catch (err: any) {
+    return res.json({
+      configured: Boolean(creds.apiKey && creds.apiSecret),
+      hasKey: Boolean(creds.apiKey),
+      hasSecret: Boolean(creds.apiSecret),
+      testnet: creds.isTestnet,
+      connected: false,
+      source: creds.source,
+      error: err.message || 'Error al conectar con Binance'
+    });
+  }
+});
+
+// 2. GET /api/binance/futures/account
+app.get('/api/binance/futures/account', async (req: Request, res: Response) => {
+  const creds = getBinanceCredentials(req);
+
+  if (!creds.apiKey || !creds.apiSecret) {
+    return res.status(401).json({
+      ok: false,
+      error: 'Credenciales de Binance no configuradas. Por favor añade BINANCE_API_KEY y BINANCE_API_SECRET.',
+      code: -2015
+    });
+  }
+
+  try {
+    const data = await binanceSignedRequest('/fapi/v2/account', {}, creds);
+    return res.json({ ok: true, data });
+  } catch (err: any) {
+    console.error('Error fetching Binance futures account:', err);
+    return res.status(err.status || 500).json({
+      ok: false,
+      error: err.message || 'Error al obtener la cuenta de futuros de Binance',
+      code: err.code
+    });
+  }
+});
+
+// 3. GET /api/binance/futures/positions
+app.get('/api/binance/futures/positions', async (req: Request, res: Response) => {
+  const creds = getBinanceCredentials(req);
+
+  if (!creds.apiKey || !creds.apiSecret) {
+    return res.status(401).json({
+      ok: false,
+      error: 'Credenciales de Binance no configuradas.',
+      code: -2015
+    });
+  }
+
+  try {
+    const rawPositions = await binanceSignedRequest('/fapi/v2/positionRisk', {}, creds);
+    
+    // Filter only active open positions (positionAmt != 0) unless requested all
+    const showAll = req.query.all === 'true';
+    const positions = (Array.isArray(rawPositions) ? rawPositions : [])
+      .filter((pos: any) => showAll || parseFloat(pos.positionAmt) !== 0)
+      .map((pos: any) => {
+        const amt = parseFloat(pos.positionAmt);
+        const entry = parseFloat(pos.entryPrice);
+        const mark = parseFloat(pos.markPrice);
+        const pnl = parseFloat(pos.unRealizedProfit);
+        const lev = parseFloat(pos.leverage) || 1;
+        const notional = Math.abs(amt * mark);
+        const initialMargin = lev > 0 ? (notional / lev) : 0;
+        const roe = initialMargin > 0 ? (pnl / initialMargin) * 100 : 0;
+
+        return {
+          symbol: pos.symbol,
+          positionAmt: amt,
+          entryPrice: entry,
+          markPrice: mark,
+          unRealizedProfit: pnl,
+          liquidationPrice: parseFloat(pos.liquidationPrice) || 0,
+          leverage: lev,
+          marginType: (pos.marginType || 'cross').toLowerCase(),
+          isolatedMargin: parseFloat(pos.isolatedMargin) || 0,
+          positionSide: pos.positionSide || 'BOTH',
+          notional,
+          roe,
+          side: amt > 0 ? 'LONG' : 'SHORT',
+          breakEvenPrice: parseFloat(pos.breakEvenPrice) || entry,
+          updateTime: pos.updateTime || Date.now()
+        };
+      });
+
+    return res.json({
+      ok: true,
+      count: positions.length,
+      positions
+    });
+  } catch (err: any) {
+    console.error('Error fetching Binance futures positions:', err);
+    return res.status(err.status || 500).json({
+      ok: false,
+      error: err.message || 'Error al obtener posiciones de futuros',
+      code: err.code
+    });
+  }
+});
+
+// 4. GET /api/binance/futures/orders
+app.get('/api/binance/futures/orders', async (req: Request, res: Response) => {
+  const creds = getBinanceCredentials(req);
+
+  if (!creds.apiKey || !creds.apiSecret) {
+    return res.status(401).json({
+      ok: false,
+      error: 'Credenciales de Binance no configuradas.',
+      code: -2015
+    });
+  }
+
+  try {
+    const rawOrders = await binanceSignedRequest('/fapi/v1/openOrders', {}, creds);
+    return res.json({
+      ok: true,
+      orders: Array.isArray(rawOrders) ? rawOrders : []
+    });
+  } catch (err: any) {
+    console.error('Error fetching Binance futures open orders:', err);
+    return res.status(err.status || 500).json({
+      ok: false,
+      error: err.message || 'Error al obtener órdenes abiertas',
+      code: err.code
+    });
+  }
+});
+
+// Setup dev server with Vite middlewares or production static files
+async function startServer() {
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { 
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR !== 'true',
+        watch: process.env.DISABLE_HMR === 'true' ? null : {}
+      },
+      appType: 'spa'
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.resolve(__dirname, 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.resolve(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[Binance Radar Server] Server listening on http://0.0.0.0:${PORT} (Node ${process.version})`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
