@@ -21,6 +21,7 @@ import { SheetsConfigModal } from './components/SheetsConfigModal';
 import { AddStrategyModal } from './components/AddStrategyModal';
 import { DcaSimulatorModal } from './components/DcaSimulatorModal';
 import { MultiStrategyComparisonModal } from './components/MultiStrategyComparisonModal';
+import { calculateRiskReward } from './utils/riskReward';
 import { INITIAL_STRATEGIES, INITIAL_ORDERS } from './data/initialStrategies';
 import { TradeLogService } from './services/tradeLogService';
 import { proxyService } from './services/proxyService';
@@ -231,6 +232,17 @@ export default function App() {
           case 'LEVERAGE_GE': {
             const minLev = Number(rule.value);
             if ((strat.leverage || 5) < minLev) return false;
+            break;
+          }
+          case 'RR_GE': {
+            const minRr = Number(rule.value);
+            const stratRr = calculateRiskReward({
+              entryPrice: strat.entryPrice,
+              stopLoss: strat.stopLoss,
+              type: strat.type,
+              orders: strat.orders
+            });
+            if (stratRr.maxRiskReward < minRr) return false;
             break;
           }
           case 'HAS_DCA': {

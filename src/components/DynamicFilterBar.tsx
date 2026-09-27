@@ -16,7 +16,8 @@ import {
   ShieldAlert, 
   Sparkles,
   RotateCcw,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Scale
 } from 'lucide-react';
 
 interface DynamicFilterBarProps {
@@ -43,7 +44,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
   filteredCount
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [activeCategoryTab, setActiveCategoryTab] = useState<'distance' | 'direction' | 'status' | 'leverage' | 'special' | 'category'>('distance');
+  const [activeCategoryTab, setActiveCategoryTab] = useState<'distance' | 'direction' | 'risk_reward' | 'special'>('distance');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -60,11 +61,6 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isDropdownOpen]);
-
-  // Extract unique categories from strategies
-  const availableCategories = Array.from(
-    new Set(strategies.map(s => s.category).filter(Boolean))
-  ) as string[];
 
   // Helper to add or replace filter of same type
   const handleSelectRule = (rule: ActiveFilterRule) => {
@@ -95,7 +91,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
           {searchQuery && (
             <button
               onClick={() => onSearchChange('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-md transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-md transition-colors cursor-pointer"
               title="Borrar búsqueda"
             >
               <X className="w-4 h-4" />
@@ -128,18 +124,18 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                   </span>
                   <button
                     onClick={() => setIsDropdownOpen(false)}
-                    className="text-slate-400 hover:text-white p-1"
+                    className="text-slate-400 hover:text-white p-1 cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* Sub-Tabs */}
-                <div className="grid grid-cols-3 gap-1 bg-slate-900 p-1 rounded-xl mb-3 text-xs font-semibold">
+                <div className="grid grid-cols-4 gap-1 bg-slate-900 p-1 rounded-xl mb-3 text-xs font-semibold">
                   <button
                     type="button"
                     onClick={() => setActiveCategoryTab('distance')}
-                    className={`py-1.5 px-2 rounded-lg transition-colors ${
+                    className={`py-1.5 px-1.5 rounded-lg transition-colors text-center ${
                       activeCategoryTab === 'distance' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -147,8 +143,17 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setActiveCategoryTab('risk_reward')}
+                    className={`py-1.5 px-1.5 rounded-lg transition-colors text-center ${
+                      activeCategoryTab === 'risk_reward' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Ratio R:B
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setActiveCategoryTab('direction')}
-                    className={`py-1.5 px-2 rounded-lg transition-colors ${
+                    className={`py-1.5 px-1.5 rounded-lg transition-colors text-center ${
                       activeCategoryTab === 'direction' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -157,7 +162,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                   <button
                     type="button"
                     onClick={() => setActiveCategoryTab('special')}
-                    className={`py-1.5 px-2 rounded-lg transition-colors ${
+                    className={`py-1.5 px-1.5 rounded-lg transition-colors text-center ${
                       activeCategoryTab === 'special' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -188,7 +193,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                           displayValue: `≤ ${item.val}%`,
                           value: item.val
                         })}
-                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-medium flex items-center justify-between transition-colors ${
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-medium flex items-center justify-between transition-colors cursor-pointer ${
                           isRuleActive('DISTANCE_LE', item.val)
                             ? 'bg-cyan-950 border border-cyan-500 text-cyan-300'
                             : 'bg-slate-900 hover:bg-slate-800 text-slate-200'
@@ -196,6 +201,45 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                       >
                         <span>{item.label}</span>
                         {isRuleActive('DISTANCE_LE', item.val) && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Tab: Ratio R:B */}
+                {activeCategoryTab === 'risk_reward' && (
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-slate-400 block mb-2 font-medium">
+                      Filtrar por Ratio Riesgo / Beneficio (R:B):
+                    </span>
+                    {[
+                      { val: 1.5, label: 'R:B Convencional (≥ 1:1.5)' },
+                      { val: 2.0, label: 'R:B Óptimo (≥ 1:2.0)' },
+                      { val: 2.5, label: 'R:B Alto (≥ 1:2.5)' },
+                      { val: 3.0, label: 'R:B Excelente (≥ 1:3.0)' },
+                      { val: 4.0, label: 'R:B Ultra (≥ 1:4.0)' }
+                    ].map((item) => (
+                      <button
+                        key={item.val}
+                        type="button"
+                        onClick={() => handleSelectRule({
+                          id: `rr-${item.val}`,
+                          type: 'RR_GE',
+                          label: 'Ratio R:B',
+                          displayValue: `≥ 1:${item.val}`,
+                          value: item.val
+                        })}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                          isRuleActive('RR_GE', item.val)
+                            ? 'bg-purple-950 border border-purple-500 text-purple-300'
+                            : 'bg-slate-900 hover:bg-slate-800 text-slate-200'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Scale className="w-3.5 h-3.5 text-purple-400" />
+                          {item.label}
+                        </span>
+                        {isRuleActive('RR_GE', item.val) && <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" />}
                       </button>
                     ))}
                   </div>
@@ -216,7 +260,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                             displayValue: 'LONG ▲',
                             value: 'LONG'
                           })}
-                          className="px-3 py-2 rounded-xl text-xs font-mono font-bold bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 flex items-center justify-center gap-1.5"
+                          className="px-3 py-2 rounded-xl text-xs font-mono font-bold bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                           <TrendingUp className="w-3.5 h-3.5" />
                           <span>Solo LONG</span>
@@ -230,7 +274,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                             displayValue: 'SHORT ▼',
                             value: 'SHORT'
                           })}
-                          className="px-3 py-2 rounded-xl text-xs font-mono font-bold bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 flex items-center justify-center gap-1.5"
+                          className="px-3 py-2 rounded-xl text-xs font-mono font-bold bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                           <TrendingDown className="w-3.5 h-3.5" />
                           <span>Solo SHORT</span>
@@ -252,7 +296,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                               displayValue: st,
                               value: st
                             })}
-                            className="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-center font-semibold"
+                            className="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-center font-semibold cursor-pointer"
                           >
                             {st}
                           </button>
@@ -274,7 +318,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                         displayValue: 'En Zona Activa',
                         value: true
                       })}
-                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-bold bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 flex items-center justify-between"
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-bold bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 flex items-center justify-between cursor-pointer"
                     >
                       <span className="flex items-center gap-2">
                         <Target className="w-4 h-4 text-cyan-400" />
@@ -292,7 +336,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                         displayValue: 'TP Alcanzado',
                         value: true
                       })}
-                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-bold bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30 flex items-center justify-between"
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-bold bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30 flex items-center justify-between cursor-pointer"
                     >
                       <span className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -310,31 +354,13 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
                         displayValue: 'Con Niveles DCA',
                         value: true
                       })}
-                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-bold bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 flex items-center justify-between"
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-bold bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 flex items-center justify-between cursor-pointer"
                     >
                       <span className="flex items-center gap-2">
                         <Layers className="w-4 h-4 text-amber-400" />
                         Con Matriz DCA
                       </span>
                       <span className="text-xs text-slate-400">Escalonado</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSelectRule({
-                        id: 'perf-positive',
-                        type: 'PERF_24H',
-                        label: '24h Change',
-                        displayValue: 'En Ganancia (> 0%)',
-                        value: 'POSITIVE'
-                      })}
-                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-bold bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-slate-800 flex items-center justify-between"
-                    >
-                      <span className="flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-emerald-400" />
-                        Top Gainers 24h
-                      </span>
-                      <span className="text-xs text-emerald-400">&gt; 0%</span>
                     </button>
                   </div>
                 )}
@@ -360,7 +386,35 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
           Filtros Rápidos:
         </span>
 
-        {/* Preset 1: En Alerta */}
+        {/* Preset: R:B >= 1:2.0 */}
+        <button
+          type="button"
+          onClick={() => {
+            const exists = activeFilters.some(f => f.type === 'RR_GE' && f.value === 2.0);
+            if (exists) {
+              const rule = activeFilters.find(f => f.type === 'RR_GE' && f.value === 2.0);
+              if (rule) onRemoveFilter(rule.id);
+            } else {
+              onAddFilter({
+                id: 'preset-rr-2',
+                type: 'RR_GE',
+                label: 'Ratio R:B',
+                displayValue: '≥ 1:2.0',
+                value: 2.0
+              });
+            }
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            activeFilters.some(f => f.type === 'RR_GE' && f.value === 2.0)
+              ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20'
+              : 'bg-slate-950 hover:bg-slate-800 text-purple-300 border border-purple-500/30'
+          }`}
+        >
+          <Scale className="w-3.5 h-3.5" />
+          <span>⚖️ R:B ≥ 1:2.0</span>
+        </button>
+
+        {/* Preset: En Alerta */}
         <button
           type="button"
           onClick={() => {
@@ -388,7 +442,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
           <span>⚡ En Zona Alerta</span>
         </button>
 
-        {/* Preset 2: TP Hit */}
+        {/* Preset: TP Hit */}
         <button
           type="button"
           onClick={() => {
@@ -416,7 +470,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
           <span>🎯 TP Alcanzado</span>
         </button>
 
-        {/* Preset 3: Distancia <= 2% */}
+        {/* Preset: Distancia <= 2% */}
         <button
           type="button"
           onClick={() => {
@@ -444,7 +498,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
           <span>📍 Distancia ≤ 2%</span>
         </button>
 
-        {/* Preset 4: DCA Configurado */}
+        {/* Preset: DCA Configurado */}
         <button
           type="button"
           onClick={() => {
@@ -491,7 +545,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
               <button
                 type="button"
                 onClick={() => onRemoveFilter(filter.id)}
-                className="hover:text-rose-400 p-0.5 -mr-0.5 rounded transition-colors"
+                className="hover:text-rose-400 p-0.5 -mr-0.5 rounded transition-colors cursor-pointer"
                 title={`Eliminar filtro ${filter.label}`}
               >
                 <X className="w-3.5 h-3.5" />

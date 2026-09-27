@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StrategyWithOrders } from '../types';
 import { TakeProfitAccordion } from './TakeProfitAccordion';
 import { MiniSparkline } from './MiniSparkline';
+import { calculateRiskReward } from '../utils/riskReward';
 import { 
   Target, 
   ChevronDown, 
@@ -13,7 +14,8 @@ import {
   Activity,
   Copy,
   Check,
-  Percent
+  Percent,
+  Scale
 } from 'lucide-react';
 
 interface StrategyRowProps {
@@ -43,6 +45,14 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
   const effectiveThreshold = strategy.customAlertThreshold ?? 1.5;
   const isLong = strategy.type === 'LONG';
   const currentPrice = strategy.currentPrice;
+
+  // Calculate Risk:Reward metrics
+  const rr = calculateRiskReward({
+    entryPrice: strategy.entryPrice,
+    stopLoss: strategy.stopLoss,
+    type: strategy.type,
+    orders: strategy.orders
+  });
 
   // Evaluate which user-defined Take Profit targets are hit
   const hitTps = strategy.orders.filter(tp => {
@@ -109,7 +119,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
 
   const copyEntry = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(`${strategy.symbol} ${strategy.type} @ $${strategy.entryPrice}`);
+    navigator.clipboard.writeText(`${strategy.symbol} ${strategy.type} @ $${strategy.entryPrice} | SL: $${strategy.stopLoss} | R:B: ${rr.formattedRatio}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -200,6 +210,23 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
                 </span>
               )}
 
+              {/* R:B (Risk:Reward) Ratio Badge */}
+              <span 
+                title={`Ratio Riesgo/Beneficio: 1 a ${rr.maxRiskReward.toFixed(2)} (Riesgo: -${rr.slDistancePct.toFixed(1)}% | Recompensa TP Max: +${rr.maxRewardPct.toFixed(1)}%)`}
+                className={`inline-flex items-center gap-1 text-xs font-black px-2.5 py-0.5 rounded-md font-mono shadow-xs border ${
+                  rr.maxRiskReward >= 3.0
+                    ? 'bg-purple-950 text-purple-300 border-purple-600/80'
+                    : rr.maxRiskReward >= 2.0
+                    ? 'bg-cyan-950 text-cyan-300 border-cyan-600/80'
+                    : rr.maxRiskReward >= 1.5
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-700/80'
+                    : 'bg-slate-900 text-slate-400 border-slate-700'
+                }`}
+              >
+                <Scale className="w-3 h-3 text-cyan-400" />
+                <span>R:B {rr.formattedRatio}</span>
+              </span>
+
               {/* Leverage Badge */}
               <span className="text-xs font-bold font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-cyan-300">
                 {strategy.leverage || 5}x
@@ -229,7 +256,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
           </div>
         </div>
 
-        {/* Middle Section: Live Price, 15m Sparkline, Planned Entry, Radar Distance */}
+        {/* Middle Section: Live Price, 15m Sparkline, Planned Entry & R:B, Radar Distance */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 flex-1 max-w-2xl items-center">
           
           {/* 1. Precio Actual (Live Ticker con Ping) */}
@@ -265,7 +292,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             />
           </div>
 
-          {/* 3. Precio Entrada Planificado */}
+          {/* 3. Precio Entrada Planificado & R:B Ratio */}
           <div>
             <span className="text-xs uppercase font-mono text-slate-400 block mb-1 font-semibold">
               Entrada
@@ -273,9 +300,14 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             <div className="font-mono font-black text-base text-cyan-300 tabular-nums">
               {formatPrice(strategy.entryPrice)}
             </div>
-            <span className="text-xs font-mono text-rose-400 font-semibold block mt-0.5">
-              SL: {formatPrice(strategy.stopLoss)}
-            </span>
+            <div className="flex items-center justify-between text-xs font-mono mt-0.5">
+              <span className="text-rose-400 font-semibold">
+                SL: {formatPrice(strategy.stopLoss)}
+              </span>
+              <span className="text-cyan-400 font-bold ml-1.5" title="Ratio Riesgo/Beneficio Máximo">
+                {rr.formattedRatio}
+              </span>
+            </div>
           </div>
 
           {/* 4. Distancia al Trigger (Radar Score) */}
@@ -372,7 +404,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             
             <button
               onClick={copyEntry}
-              title="Copiar parámetros del trade"
+              title="Copiar parámetros del trade con R:B"
               className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-400 stroke-[2.5]" /> : <Copy className="w-4 h-4" />}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StrategyWithOrders } from '../types';
+import { calculateRiskReward } from '../utils/riskReward';
 import { 
   X, 
   ArrowLeftRight, 
@@ -18,7 +19,8 @@ import {
   Zap, 
   BarChart3,
   Flame,
-  Award
+  Award,
+  Scale
 } from 'lucide-react';
 
 interface MultiStrategyComparisonModalProps {
@@ -55,21 +57,25 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
     const live = s.currentPrice || s.entryPrice;
     const pnl = s.entryPrice > 0 ? ((live - s.entryPrice) / s.entryPrice) * 100 * (isLong ? 1 : -1) : 0;
     const roi = pnl * (s.leverage || 5);
-    const slRisk = s.entryPrice > 0 ? Math.abs(((s.entryPrice - s.stopLoss) / s.entryPrice) * 100) : 0;
     const distance = s.distancePercent !== undefined ? s.distancePercent : Math.abs(((live - s.entryPrice) / live) * 100);
 
-    const maxTp = s.orders.length > 0 ? s.orders[s.orders.length - 1].targetPrice : (isLong ? s.entryPrice * 1.1 : s.entryPrice * 0.9);
-    const maxReward = s.entryPrice > 0 ? Math.abs(((maxTp - s.entryPrice) / s.entryPrice) * 100) : 0;
-    const rrRatio = slRisk > 0 ? maxReward / slRisk : 0;
+    const rr = calculateRiskReward({
+      entryPrice: s.entryPrice,
+      stopLoss: s.stopLoss,
+      type: s.type,
+      orders: s.orders
+    });
 
     return {
       live,
       pnl,
       roi,
-      slRisk,
+      slRisk: rr.slDistancePct,
       distance,
-      rrRatio,
-      isLong
+      rrRatio: rr.maxRiskReward,
+      formattedRr: rr.formattedRatio,
+      isLong,
+      rr
     };
   };
 
@@ -111,7 +117,7 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
       lines.push(`${idx + 1}. [${s.symbol}] ${s.type} ${s.leverage || 5}x`);
       lines.push(`   Precio Live: ${formatPrice(m.live)} | Entrada: ${formatPrice(s.entryPrice)}`);
       lines.push(`   Distancia: ${m.distance.toFixed(2)}% | ROI Actual: ${m.roi >= 0 ? '+' : ''}${m.roi.toFixed(2)}%`);
-      lines.push(`   Stop Loss: ${formatPrice(s.stopLoss)} (-${m.slRisk.toFixed(2)}%) | R:B: 1:${m.rrRatio.toFixed(2)}`);
+      lines.push(`   Stop Loss: ${formatPrice(s.stopLoss)} (-${m.slRisk.toFixed(2)}%) | Ratio R:B: ${m.formattedRr}`);
       lines.push(`   Take Profits: ${s.orders.map(o => `${o.type}: ${formatPrice(o.targetPrice)} (${o.closePercentage}%)`).join(' | ')}`);
       lines.push('');
     });
@@ -134,14 +140,14 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg font-bold text-white font-mono flex items-center gap-2">
-                  Comparación de Rendimiento Lado a Lado
+                  Comparación de Rendimiento & Ratios R:B
                 </h3>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-cyan-950 border border-cyan-500/40 text-cyan-300">
                   {strategies.length} {strategies.length === 1 ? 'Estrategia' : 'Estrategias'}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Análisis comparativo de métricas de riesgo, distancias, targets y temporalidades
+                Análisis comparativo de R:B, riesgo a Stop Loss, distancias y objetivos Take Profit
               </p>
             </div>
           </div>
@@ -149,7 +155,7 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopySummary}
-              className="px-3 py-1.5 text-xs font-mono font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 text-xs font-mono font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Copiar resumen al portapapeles"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -158,14 +164,14 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
 
             <button
               onClick={onClearSelection}
-              className="px-3 py-1.5 text-xs font-mono font-semibold text-rose-400 hover:bg-rose-950/40 border border-rose-900/60 rounded-lg transition-colors"
+              className="px-3 py-1.5 text-xs font-mono font-semibold text-rose-400 hover:bg-rose-950/40 border border-rose-900/60 rounded-lg transition-colors cursor-pointer"
             >
               Limpiar Selección
             </button>
 
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -196,7 +202,7 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
                   <button
                     onClick={() => onRemoveStrategy(strategy.id)}
                     title="Quitar de comparación"
-                    className="absolute top-3 right-3 text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-slate-900 transition-colors"
+                    className="absolute top-3 right-3 text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-slate-900 transition-colors cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -229,19 +235,19 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
 
                     {/* Highlights Badge */}
                     <div className="flex flex-wrap gap-1.5 mb-4">
+                      {isBestRr && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-600 font-bold flex items-center gap-1">
+                          <Scale className="w-3.5 h-3.5 text-purple-400" /> Mejor R:B ({m.formattedRr})
+                        </span>
+                      )}
                       {isBestRoi && (
-                        <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-600 font-bold flex items-center gap-1">
-                          <Award className="w-3 h-3 text-emerald-400" /> Mayor Rendimiento
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-600 font-bold flex items-center gap-1">
+                          <Award className="w-3.5 h-3.5 text-emerald-400" /> Mayor Rendimiento
                         </span>
                       )}
                       {isClosest && (
-                        <span className="text-[9px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-600 font-bold flex items-center gap-1">
-                          <Target className="w-3 h-3 text-cyan-400" /> Más Próxima a Entrada
-                        </span>
-                      )}
-                      {isBestRr && (
-                        <span className="text-[9px] px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-600 font-bold flex items-center gap-1">
-                          <Zap className="w-3 h-3 text-purple-400" /> Mejor Ratio R:B
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-600 font-bold flex items-center gap-1">
+                          <Target className="w-3.5 h-3.5 text-cyan-400" /> Más Próxima a Entrada
                         </span>
                       )}
                     </div>
@@ -275,8 +281,8 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
                       </div>
                     </div>
 
-                    {/* Metric 2: Stop Loss & Invalidation */}
-                    <div className="bg-rose-950/20 border border-rose-900/40 rounded-xl p-3 mb-3 space-y-1.5 text-xs">
+                    {/* Metric 2: Stop Loss & Ratio R:B */}
+                    <div className="bg-rose-950/20 border border-rose-900/40 rounded-xl p-3 mb-3 space-y-2 text-xs">
                       <div className="flex items-center justify-between text-rose-300 font-bold">
                         <span className="flex items-center gap-1">
                           <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Stop Loss
@@ -289,9 +295,11 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
                         <span className="text-rose-400 font-semibold">-{m.slRisk.toFixed(2)}%</span>
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-rose-900/30">
-                        <span className="text-slate-400">Ratio Riesgo/Beneficio:</span>
-                        <span className="text-cyan-300 font-bold">1:{m.rrRatio.toFixed(2)}</span>
+                      <div className="flex items-center justify-between text-xs pt-1.5 border-t border-rose-900/30">
+                        <span className="text-slate-300 font-semibold flex items-center gap-1">
+                          <Scale className="w-3.5 h-3.5 text-cyan-400" /> Ratio R:B Máximo:
+                        </span>
+                        <span className="text-cyan-300 font-black text-sm">{m.formattedRr}</span>
                       </div>
                     </div>
 
@@ -378,7 +386,7 @@ export const MultiStrategyComparisonModal: React.FC<MultiStrategyComparisonModal
 
           <button
             onClick={onClose}
-            className="px-5 py-2 text-xs font-bold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg shadow-sm transition-colors"
+            className="px-5 py-2 text-xs font-bold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg shadow-sm transition-colors cursor-pointer"
           >
             Cerrar Comparación
           </button>
