@@ -9,7 +9,7 @@ export interface DcaLevel {
 
 export interface TimeframeCandle {
   timeframe: string; // "5m", "15m", "1h", "2h", "3h", "4h", "1d"
-  label: string; // e.g. "5M", "15M", "1H / ACTUAL", "2H", "3H", "4H", "DIARIO"
+  label: string; // e.g. "5M", "15M", "1H", "2H", "3H", "4H", "DIARIO"
   timeStr: string; // e.g. "00:25", "Hoy"
   open: number;
   high: number;

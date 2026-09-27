@@ -149,7 +149,7 @@ class MultiTimeframeService {
 
           candles['1h'] = {
             timeframe: '1h',
-            label: '1H / ACTUAL',
+            label: '1H',
             timeStr: time1h.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             open: open1h,
             high: high1h,
@@ -282,7 +282,7 @@ class MultiTimeframeService {
     const required = [
       { tf: '5m', label: '5M', timeStr: '00:25', factor: 0.0015 },
       { tf: '15m', label: '15M', timeStr: '00:15', factor: 0.0028 },
-      { tf: '1h', label: '1H / ACTUAL', timeStr: '00:00', factor: 0.0045 },
+      { tf: '1h', label: '1H', timeStr: '00:00', factor: 0.0045 },
       { tf: '2h', label: '2H', timeStr: '23:00', factor: 0.0075 },
       { tf: '3h', label: '3H', timeStr: '22:00', factor: -0.011 },
       { tf: '4h', label: '4H', timeStr: '21:00', factor: -0.015 },
