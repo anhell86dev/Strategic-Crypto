@@ -1,0 +1,6 @@
+{
+  "name": "Crypto Strategy Radar",
+  "description": "Real-time cryptocurrency strategy radar connecting planned trade setups with live Binance WebSockets and dynamic entry distance ranking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
