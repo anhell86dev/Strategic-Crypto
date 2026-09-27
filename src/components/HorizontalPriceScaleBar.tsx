@@ -12,15 +12,80 @@ import {
   ShieldAlert,
   Flame,
   Info,
-  Maximize2,
-  Crosshair,
-  ChevronDown,
-  ChevronUp
+  GitCommit,
+  ArrowDown,
+  ArrowUp,
+  GitBranch,
+  SlidersHorizontal,
+  ChevronDown
 } from 'lucide-react';
 
 interface HorizontalPriceScaleBarProps {
   strategy: StrategyWithOrders;
 }
+
+/**
+ * Helper to calculate elapsed hours since the strategy was published
+ */
+export const getStrategyElapsedHoursInfo = (rawDate?: string, stratName?: string) => {
+  if (!rawDate && !stratName) return { hours: 24, label: '24H', timeStr: 'hace 24h', fullLabel: '24H (PUB)' };
+  const str = rawDate || '';
+
+  const monthMap: Record<string, string> = {
+    Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+    Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12'
+  };
+
+  let targetDate: Date | null = null;
+  const dateMatch = str.match(/([A-Z]{3})\s+(\d{1,2})\s+(\d{4})/i);
+  const timeMatches = [...str.matchAll(/(\d{2}):(\d{2})(?::\d{2})?/g)];
+
+  let formattedTime = '';
+  if (timeMatches.length >= 2) {
+    formattedTime = `${timeMatches[1][1]}:${timeMatches[1][2]}`;
+  } else if (timeMatches.length === 1) {
+    formattedTime = `${timeMatches[0][1]}:${timeMatches[0][2]}`;
+  }
+
+  if (dateMatch && formattedTime) {
+    const month = monthMap[dateMatch[1]] || dateMatch[1];
+    const day = dateMatch[2].padStart(2, '0');
+    const year = dateMatch[3];
+    const d = new Date(`${year}-${month}-${day}T${formattedTime}:00-06:00`);
+    if (!isNaN(d.getTime())) targetDate = d;
+  }
+
+  if (!targetDate || isNaN(targetDate.getTime())) {
+    const nameMatch = (stratName || '').match(/_(\d{2})[-/.](\d{2})[-/.](\d{2,4})_(\d{2}:\d{2})/);
+    if (nameMatch) {
+      const [, d, m, y, t] = nameMatch;
+      const fullYear = y.length === 2 ? `20${y}` : y;
+      const dObj = new Date(`${fullYear}-${m}-${d}T${t}:00-06:00`);
+      if (!isNaN(dObj.getTime())) targetDate = dObj;
+    }
+  }
+
+  if (!targetDate || isNaN(targetDate.getTime())) {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) targetDate = parsed;
+  }
+
+  if (!targetDate || isNaN(targetDate.getTime())) {
+    return { hours: 24, label: '24H', timeStr: 'hace 24h', fullLabel: '24H (PUB)' };
+  }
+
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - targetDate.getTime());
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const totalHours = Math.max(1, Math.floor(totalMinutes / 60));
+
+  return {
+    hours: totalHours,
+    label: `${totalHours}H`,
+    timeStr: `hace ${totalHours}h`,
+    fullLabel: `${totalHours}H (PUB)`
+  };
+};
 
 export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = ({
   strategy
@@ -33,11 +98,17 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
     stopLoss,
     currentPrice,
     orders = [],
-    leverage = 5
+    leverage = 5,
+    date: pubDate,
+    strategyName
   } = strategy;
 
   const isLong = type === 'LONG';
   const livePrice = currentPrice || entryPrice;
+
+  // Visual options state
+  const [showConnectors, setShowConnectors] = useState<boolean>(true);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 'desc' = Mayor a menor (1D -> 5M)
 
   // Real-time multi-timeframe candle data state
   const [tfData, setTfData] = useState(() => {
@@ -68,6 +139,28 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
     if (val >= 0.01) return `$${val.toFixed(5)}`;
     return `$${val.toFixed(7)}`;
   };
+
+  // Calculate elapsed hours since publication
+  const pubInfo = useMemo(() => {
+    return getStrategyElapsedHoursInfo(pubDate, strategyName);
+  }, [pubDate, strategyName]);
+
+  // Timeframe Candle representing elapsed hours since publication
+  const pubCandle = useMemo(() => {
+    const change = entryPrice > 0 ? ((livePrice - entryPrice) / entryPrice) * 100 : 0;
+    return {
+      timeframe: 'pub',
+      label: `${pubInfo.hours}H (PUB)`,
+      timeStr: pubInfo.timeStr,
+      open: entryPrice,
+      close: livePrice,
+      high: Math.max(entryPrice, livePrice),
+      low: Math.min(entryPrice, livePrice),
+      changePercent: change,
+      isPublicationTimeframe: true,
+      durationMinutes: pubInfo.hours * 60
+    };
+  }, [pubInfo, entryPrice, livePrice]);
 
   // Compute unified price range bounds for the continuous scale
   const { minScale, maxScale, scaleSpan } = useMemo(() => {
@@ -102,19 +195,81 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   const tp2Pos = getPercentPos(tp2);
   const tp3Pos = getPercentPos(tp3);
 
-  // Timeframe Rows (1H clean without "ACTUAL")
+  // Timeframe Rows with assigned duration for exact hierarchical ordering
   const timeframesList = useMemo(() => {
     const candles = tfData?.candles || {};
-    return [
-      candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: livePrice * 0.9985, close: livePrice, changePercent: 0.15 },
-      candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: livePrice * 0.9997, close: livePrice, changePercent: 0.03 },
-      candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: livePrice * 0.9984, close: livePrice, changePercent: 0.16 },
-      candles['2h'] || { timeframe: '2h', label: '2H', timeStr: '23:00', open: livePrice * 0.9731, close: livePrice, changePercent: 2.69 },
-      candles['3h'] || { timeframe: '3h', label: '3H', timeStr: '22:00', open: livePrice * 1.0296, close: livePrice, changePercent: -2.96 },
-      candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: livePrice * 1.0095, close: livePrice, changePercent: -0.95 },
-      candles['1d'] || { timeframe: '1d', label: 'DIARIO', timeStr: 'Hoy', open: livePrice * 1.0440, close: livePrice, changePercent: -4.40 }
+    const rawList = [
+      { ...(candles['1d'] || { timeframe: '1d', label: 'DIARIO', timeStr: 'Hoy', open: livePrice * 1.0440, close: livePrice, changePercent: -4.40 }), durationMinutes: 1440 },
+      pubCandle,
+      { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: livePrice * 1.0095, close: livePrice, changePercent: -0.95 }), durationMinutes: 240 },
+      { ...(candles['3h'] || { timeframe: '3h', label: '3H', timeStr: '22:00', open: livePrice * 1.0296, close: livePrice, changePercent: -2.96 }), durationMinutes: 180 },
+      { ...(candles['2h'] || { timeframe: '2h', label: '2H', timeStr: '23:00', open: livePrice * 0.9731, close: livePrice, changePercent: 2.69 }), durationMinutes: 120 },
+      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: livePrice * 0.9984, close: livePrice, changePercent: 0.16 }), durationMinutes: 60 },
+      { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: livePrice * 0.9997, close: livePrice, changePercent: 0.03 }), durationMinutes: 15 },
+      { ...(candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: livePrice * 0.9985, close: livePrice, changePercent: 0.15 }), durationMinutes: 5 }
     ];
-  }, [tfData, livePrice]);
+
+    // Sort according to user preference (Default: Descending = Mayor a Menor)
+    return rawList.sort((a, b) => {
+      return sortOrder === 'desc' 
+        ? b.durationMinutes - a.durationMinutes 
+        : a.durationMinutes - b.durationMinutes;
+    });
+  }, [tfData, livePrice, pubCandle, sortOrder]);
+
+  // Compute connections: The close of the higher timeframe connects to the open of the next lower timeframe
+  const connections = useMemo(() => {
+    if (!showConnectors || timeframesList.length < 2) return [];
+
+    const conns: {
+      fromIndex: number;
+      toIndex: number;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      higherLabel: string;
+      lowerLabel: string;
+      higherClosePrice: number;
+      lowerOpenPrice: number;
+    }[] = [];
+
+    const totalRows = timeframesList.length;
+
+    for (let i = 0; i < totalRows - 1; i++) {
+      const current = timeframesList[i];
+      const next = timeframesList[i + 1];
+
+      // Identify which one is higher in duration
+      const isCurrentHigher = current.durationMinutes >= next.durationMinutes;
+      const higherTF = isCurrentHigher ? current : next;
+      const lowerTF = isCurrentHigher ? next : current;
+      const higherIndex = isCurrentHigher ? i : i + 1;
+      const lowerIndex = isCurrentHigher ? i + 1 : i;
+
+      // Close of higher -> Open of lower
+      const x1 = getPercentPos(higherTF.close);
+      const y1 = ((higherIndex + 0.5) / totalRows) * 100;
+
+      const x2 = getPercentPos(lowerTF.open);
+      const y2 = ((lowerIndex + 0.5) / totalRows) * 100;
+
+      conns.push({
+        fromIndex: higherIndex,
+        toIndex: lowerIndex,
+        x1,
+        y1,
+        x2,
+        y2,
+        higherLabel: higherTF.label,
+        lowerLabel: lowerTF.label,
+        higherClosePrice: higherTF.close,
+        lowerOpenPrice: lowerTF.open
+      });
+    }
+
+    return conns;
+  }, [timeframesList, showConnectors, minScale, scaleSpan]);
 
   // ATR metrics
   const atrVal = tfData?.atr14 || (livePrice * 0.02);
@@ -157,27 +312,51 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
               ({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}% · ROI: {roiPercent >= 0 ? '+' : ''}{roiPercent.toFixed(2)}%)
             </span>
           </div>
+
+          {/* Horas Transcurridas desde Publicación */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/60 border border-cyan-500/40 text-xs font-mono text-cyan-300">
+            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-cyan-400 font-bold">PUB:</span>
+            <span className="text-white font-bold">{pubInfo.hours}h</span>
+            <span className="text-cyan-400/70 text-[10px]">({pubInfo.timeStr})</span>
+          </div>
         </div>
 
-        {/* Semáforo de Estado y Leyenda */}
-        <div className="flex items-center flex-wrap gap-3 font-mono text-xs">
-          <div className="flex items-center gap-3 text-[11px] text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Apertura (O)
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Cierre (C)
-            </span>
-          </div>
+        {/* Controles de Unión y Orden de Temporalidades */}
+        <div className="flex items-center flex-wrap gap-2.5 font-mono text-xs">
+          
+          {/* Toggle Unir Recorridos */}
+          <button
+            onClick={() => setShowConnectors(!showConnectors)}
+            title="Conectar el Cierre de la temporalidad mayor con la Apertura de la menor"
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all cursor-pointer text-xs font-bold ${
+              showConnectors 
+                ? 'bg-cyan-950 text-cyan-300 border-cyan-500/60 shadow-sm shadow-cyan-500/20' 
+                : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+            }`}
+          >
+            <GitBranch className="w-3.5 h-3.5" />
+            <span>Uniones MTF: {showConnectors ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* Selector de Orden (Mayor ➔ Menor / Menor ➔ Mayor) */}
+          <button
+            onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+            title="Alternar orden jerárquico de temporalidades"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer text-xs"
+          >
+            {sortOrder === 'desc' ? <ArrowDown className="w-3.5 h-3.5 text-cyan-400" /> : <ArrowUp className="w-3.5 h-3.5 text-amber-400" />}
+            <span>{sortOrder === 'desc' ? '1D ➔ 5M (Mayor a Menor)' : '5M ➔ 1D (Menor a Mayor)'}</span>
+          </button>
 
           {/* Warning badge */}
           {isSlHit ? (
             <span className="px-2.5 py-1 rounded-lg bg-rose-950/90 text-rose-300 border border-rose-600 font-bold flex items-center gap-1">
-              <span>💀</span> TOCÓ STOP LOSS
+              <span>💀</span> STOP LOSS
             </span>
           ) : isDangerZone ? (
             <span className="px-2.5 py-1 rounded-lg bg-rose-950/70 text-rose-300 border border-rose-800 font-bold flex items-center gap-1">
-              <span>⚠️</span> ZONA DE PELIGRO (SL · E2)
+              <span>⚠️</span> PELIGRO (SL · E2)
             </span>
           ) : (
             <span className="px-2.5 py-1 rounded-lg bg-emerald-950/70 text-emerald-300 border border-emerald-800 font-bold flex items-center gap-1">
@@ -188,9 +367,34 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
       </div>
 
-      {/* 2. BARRA PRINCIPAL INTEGRADA CON TODAS LAS TEMPORALIDADES */}
+      {/* 2. BARRA PRINCIPAL INTEGRADA CON TODAS LAS TEMPORALIDADES Y UNIONES */}
       <div className="bg-slate-900/70 border border-slate-800/90 rounded-2xl p-4 sm:p-5 relative shadow-inner space-y-4">
         
+        {/* Leyenda interactiva de puntos y uniones */}
+        <div className="flex items-center justify-between flex-wrap gap-2 text-[11px] font-mono text-slate-400 bg-slate-950/70 px-3 py-1.5 rounded-xl border border-slate-800/80">
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shadow-sm" /> Apertura (O)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-sm" /> Cierre (C)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-sm" /> Publicación (PUB)
+            </span>
+            {showConnectors && (
+              <span className="flex items-center gap-1.5 text-cyan-300 font-bold">
+                <span className="inline-block w-4 h-0.5 border-t-2 border-dashed border-cyan-400" /> 
+                Unión: Cierre (Mayor) ➔ Apertura (Menor)
+              </span>
+            )}
+          </div>
+
+          <span className="text-[10px] text-slate-500">
+            Escala Unificada: {formatPrice(minScale)} — {formatPrice(maxScale)}
+          </span>
+        </div>
+
         {/* SECCIÓN SUPERIOR DE LA BARRA: Pista Master con Marcadores de Precio (SL, E1, Live, TP1-3) */}
         <div className="relative pt-6 pb-7">
           
@@ -283,85 +487,197 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
         </div>
 
         {/* LÍNEAS TEMPORALES INTEGRADAS DIRECTAMENTE A LA BARRA PRINCIPAL */}
-        <div className="relative pt-2 border-t border-slate-800/80 space-y-1.5">
+        <div className="relative pt-2 border-t border-slate-800/80">
           
-          {/* Guía Vertical Continua: ENTRADA (E1) */}
-          <div 
-            className="absolute top-0 bottom-0 z-20 pointer-events-none border-r border-dashed border-cyan-500/70"
-            style={{ left: `${entryPos}%` }}
-          />
+          {/* Contenedor que agrupa etiquetas y pistas */}
+          <div className="flex gap-2 sm:gap-3">
+            
+            {/* Columna Izquierda: Etiquetas de Temporalidad */}
+            <div className="w-32 sm:w-36 shrink-0 flex flex-col justify-between py-0.5 space-y-2">
+              {timeframesList.map((tf) => {
+                const isUp = tf.changePercent >= 0;
+                const isPub = (tf as any).isPublicationTimeframe;
 
-          {/* Guía Vertical Continua: PRECIO LIVE */}
-          <div 
-            className="absolute top-0 bottom-0 z-20 pointer-events-none border-r border-cyan-400/80 shadow-[0_0_6px_#38bdf8]"
-            style={{ left: `${livePos}%` }}
-          />
-
-          {/* Guía Vertical Continua: STOP LOSS */}
-          <div 
-            className="absolute top-0 bottom-0 z-10 pointer-events-none border-r border-dashed border-amber-500/40"
-            style={{ left: `${slPos}%` }}
-          />
-
-          {/* Renderizado de cada barra temporal integrada (5M, 15M, 1H, 2H, 3H, 4H, DIARIO) */}
-          {timeframesList.map((tf) => {
-            const isUp = tf.changePercent >= 0;
-            const openPos = getPercentPos(tf.open);
-            const closePos = getPercentPos(tf.close);
-            const barLeft = Math.min(openPos, closePos);
-            const barWidth = Math.max(2.5, Math.abs(closePos - openPos));
-
-            return (
-              <div 
-                key={tf.timeframe}
-                className="flex items-center gap-3 p-1 rounded-lg bg-slate-950/60 border border-slate-800/40 hover:border-slate-700/80 transition-colors font-mono text-xs"
-              >
-                {/* Etiqueta Temporal Limpia (ej. 1H sin 'Actual') */}
-                <div className="flex items-center justify-between w-28 shrink-0 text-[11px] px-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-extrabold text-white text-xs">{tf.label}</span>
-                    <span className="text-slate-500 text-[10px]">({tf.timeStr})</span>
-                  </div>
-                  <span className={`font-bold text-[10px] ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {isUp ? '+' : ''}{tf.changePercent.toFixed(2)}%
-                  </span>
-                </div>
-
-                {/* Barra en la misma escala horizontal continua (0% - 100%) */}
-                <div className="flex-1 h-5 relative bg-slate-900/90 rounded-md border border-slate-800/60 overflow-hidden flex items-center">
-                  
-                  {/* Cuerpo de la vela / rango */}
+                return (
                   <div 
-                    className={`h-2.5 rounded-full absolute transition-all duration-300 ${
-                      isUp 
-                        ? 'bg-gradient-to-r from-amber-400 via-emerald-400 to-emerald-300 shadow-sm shadow-emerald-500/20' 
-                        : 'bg-gradient-to-r from-amber-400 via-rose-500 to-rose-400 shadow-sm shadow-rose-500/20'
+                    key={tf.timeframe}
+                    className={`h-7 flex items-center justify-between px-2 rounded-lg font-mono text-xs border ${
+                      isPub 
+                        ? 'bg-cyan-950/50 border-cyan-500/50 text-cyan-200 shadow-sm shadow-cyan-500/10' 
+                        : 'bg-slate-950/80 border-slate-800/80 text-slate-300'
                     }`}
-                    style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
-                  />
-
-                  {/* Punto Apertura (O) */}
-                  <div 
-                    className="absolute w-2.5 h-2.5 rounded-full bg-amber-400 border border-slate-950 z-10 shadow-xs"
-                    style={{ left: `${openPos}%`, transform: 'translateX(-50%)' }}
-                    title={`${tf.label} Open: ${formatPrice(tf.open)}`}
-                  />
-
-                  {/* Punto Cierre (C) */}
-                  <div 
-                    className={`absolute w-3.5 h-3.5 rounded-full border border-slate-950 z-10 flex items-center justify-center text-[7px] font-black text-slate-950 ${
-                      isUp ? 'bg-emerald-400' : 'bg-rose-400'
-                    }`}
-                    style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
-                    title={`${tf.label} Close: ${formatPrice(tf.close)}`}
                   >
-                    {isUp ? '▶' : '◀'}
+                    <div className="flex items-center gap-1.5 overflow-hidden">
+                      {isPub ? (
+                        <span className="font-black text-cyan-300 text-xs flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
+                          <span className="truncate">{tf.label}</span>
+                        </span>
+                      ) : (
+                        <span className="font-extrabold text-white text-xs">{tf.label}</span>
+                      )}
+                    </div>
+                    <span className={`font-bold text-[10px] shrink-0 ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {isUp ? '+' : ''}{tf.changePercent.toFixed(1)}%
+                    </span>
                   </div>
+                );
+              })}
+            </div>
 
-                </div>
-              </div>
-            );
-          })}
+            {/* Columna Derecha: Pistas Horizontales con Capa SVG de Uniones de Precios */}
+            <div className="flex-1 relative flex flex-col justify-between py-0.5 space-y-2">
+              
+              {/* Guía Vertical Continua: ENTRADA (E1) */}
+              <div 
+                className="absolute top-0 bottom-0 z-20 pointer-events-none border-r border-dashed border-cyan-500/70"
+                style={{ left: `${entryPos}%` }}
+              />
+
+              {/* Guía Vertical Continua: PRECIO LIVE */}
+              <div 
+                className="absolute top-0 bottom-0 z-20 pointer-events-none border-r border-cyan-400/80 shadow-[0_0_6px_#38bdf8]"
+                style={{ left: `${livePos}%` }}
+              />
+
+              {/* Guía Vertical Continua: STOP LOSS */}
+              <div 
+                className="absolute top-0 bottom-0 z-10 pointer-events-none border-r border-dashed border-amber-500/40"
+                style={{ left: `${slPos}%` }}
+              />
+
+              {/* CAPA SVG: UNE EL CIERRE DE LA TEMPORALIDAD MAYOR CON LA APERTURA DE LA MENOR */}
+              {showConnectors && (
+                <svg 
+                  className="absolute inset-0 w-full h-full pointer-events-none z-15 overflow-visible"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                >
+                  <defs>
+                    <linearGradient id="connectorGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.8" />
+                      <stop offset="50%" stopColor="#818cf8" stopOpacity="0.85" />
+                      <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.8" />
+                    </linearGradient>
+                    <filter id="neonBlur" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="0.8" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                  </defs>
+
+                  {connections.map((conn, idx) => {
+                    // Smooth S-curve from Cierre(Mayor) to Apertura(Menor)
+                    const midY = (conn.y1 + conn.y2) / 2;
+                    const pathD = `M ${conn.x1} ${conn.y1} C ${conn.x1} ${midY}, ${conn.x2} ${midY}, ${conn.x2} ${conn.y2}`;
+
+                    return (
+                      <g key={`conn-${idx}`}>
+                        {/* Glow halo */}
+                        <path
+                          d={pathD}
+                          fill="none"
+                          stroke="rgba(56, 189, 248, 0.25)"
+                          strokeWidth="3.5"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        {/* Main connecting dashed line */}
+                        <path
+                          d={pathD}
+                          fill="none"
+                          stroke="url(#connectorGlow)"
+                          strokeWidth="2"
+                          strokeDasharray="4 3"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        {/* Anchor Node: Cierre de la Mayor */}
+                        <circle
+                          cx={conn.x1}
+                          cy={conn.y1}
+                          r="3"
+                          fill="#38bdf8"
+                          stroke="#020617"
+                          strokeWidth="1.5"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        {/* Anchor Node: Apertura de la Menor */}
+                        <circle
+                          cx={conn.x2}
+                          cy={conn.y2}
+                          r="3"
+                          fill="#fbbf24"
+                          stroke="#020617"
+                          strokeWidth="1.5"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
+              )}
+
+              {/* Renderizado de cada pista horizontal */}
+              {timeframesList.map((tf) => {
+                const isUp = tf.changePercent >= 0;
+                const openPos = getPercentPos(tf.open);
+                const closePos = getPercentPos(tf.close);
+                const barLeft = Math.min(openPos, closePos);
+                const barWidth = Math.max(2.5, Math.abs(closePos - openPos));
+                const isPub = (tf as any).isPublicationTimeframe;
+
+                return (
+                  <div 
+                    key={tf.timeframe}
+                    className="h-7 relative bg-slate-900/90 rounded-md border border-slate-800/70 overflow-hidden flex items-center"
+                  >
+                    {/* Cuerpo de la vela / rango */}
+                    <div 
+                      className={`h-2.5 rounded-full absolute transition-all duration-300 ${
+                        isPub
+                          ? (isUp 
+                              ? 'bg-gradient-to-r from-cyan-400 via-emerald-400 to-emerald-300 shadow-md shadow-cyan-500/30' 
+                              : 'bg-gradient-to-r from-cyan-400 via-rose-500 to-rose-400 shadow-md shadow-rose-500/30')
+                          : (isUp 
+                              ? 'bg-gradient-to-r from-amber-400 via-emerald-400 to-emerald-300 shadow-sm shadow-emerald-500/20' 
+                              : 'bg-gradient-to-r from-amber-400 via-rose-500 to-rose-400 shadow-sm shadow-rose-500/20')
+                      }`}
+                      style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
+                    />
+
+                    {/* Punto Apertura (O) */}
+                    <div 
+                      className={`absolute w-3 h-3 rounded-full border border-slate-950 z-20 shadow-sm flex items-center justify-center text-[7px] font-black text-slate-950 ${
+                        isPub ? 'bg-cyan-300 ring-2 ring-cyan-500/50' : 'bg-amber-400'
+                      }`}
+                      style={{ left: `${openPos}%`, transform: 'translateX(-50%)' }}
+                      title={`${tf.label} Apertura (O): ${formatPrice(tf.open)}`}
+                    >
+                      O
+                    </div>
+
+                    {/* Punto Cierre (C) */}
+                    <div 
+                      className={`absolute w-3.5 h-3.5 rounded-full border border-slate-950 z-20 flex items-center justify-center text-[7px] font-black text-slate-950 shadow-sm ${
+                        isUp ? 'bg-emerald-400' : 'bg-rose-400'
+                      }`}
+                      style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
+                      title={`${tf.label} Cierre (C): ${formatPrice(tf.close)}`}
+                    >
+                      C
+                    </div>
+
+                  </div>
+                );
+              })}
+
+            </div>
+
+          </div>
 
         </div>
 
