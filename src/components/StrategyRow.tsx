@@ -32,24 +32,63 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
   const [copied, setCopied] = useState(false);
   const [flashClass, setFlashClass] = useState<string>('');
   const [isEditingThreshold, setIsEditingThreshold] = useState(false);
+  const [tpBurstActive, setTpBurstActive] = useState<boolean>(false);
   const prevPriceRef = useRef<number | undefined>(strategy.currentPrice);
 
   const effectiveThreshold = strategy.customAlertThreshold ?? 1.5;
+  const isLong = strategy.type === 'LONG';
+  const currentPrice = strategy.currentPrice;
 
-  // Price Flash Effect
+  // Evaluate which user-defined Take Profit targets are hit
+  const hitTps = strategy.orders.filter(tp => {
+    if (!currentPrice || currentPrice <= 0 || !tp.targetPrice) return false;
+    return isLong ? currentPrice >= tp.targetPrice : currentPrice <= tp.targetPrice;
+  });
+
+  const isTpHit = hitTps.length > 0;
+  const highestHitTp = hitTps.length > 0
+    ? (isLong
+        ? [...hitTps].sort((a, b) => b.targetPrice - a.targetPrice)[0]
+        : [...hitTps].sort((a, b) => a.targetPrice - b.targetPrice)[0])
+    : null;
+
+  // Real-time TP crossing detection & price flash
   useEffect(() => {
-    if (strategy.currentPrice !== undefined && prevPriceRef.current !== undefined) {
-      if (strategy.currentPrice > prevPriceRef.current) {
+    if (currentPrice !== undefined && prevPriceRef.current !== undefined) {
+      const prev = prevPriceRef.current;
+      const curr = currentPrice;
+
+      // Price tick direction flash
+      if (curr > prev) {
         setFlashClass('flash-up');
-      } else if (strategy.currentPrice < prevPriceRef.current) {
+      } else if (curr < prev) {
         setFlashClass('flash-down');
       }
       const timer = setTimeout(() => setFlashClass(''), 800);
-      prevPriceRef.current = strategy.currentPrice;
+
+      // Check if this tick newly crossed any user-defined TP target
+      const crossedNewTp = strategy.orders.some(tp => {
+        if (isLong) {
+          return prev < tp.targetPrice && curr >= tp.targetPrice;
+        } else {
+          return prev > tp.targetPrice && curr <= tp.targetPrice;
+        }
+      });
+
+      if (crossedNewTp) {
+        setTpBurstActive(true);
+        const burstTimer = setTimeout(() => setTpBurstActive(false), 3500);
+        return () => {
+          clearTimeout(timer);
+          clearTimeout(burstTimer);
+        };
+      }
+
+      prevPriceRef.current = currentPrice;
       return () => clearTimeout(timer);
     }
-    prevPriceRef.current = strategy.currentPrice;
-  }, [strategy.currentPrice]);
+    prevPriceRef.current = currentPrice;
+  }, [currentPrice, strategy.orders, isLong]);
 
   const formatPrice = (val?: number) => {
     if (val === undefined || isNaN(val)) return '---';
@@ -71,13 +110,16 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
   };
 
   const isAlert = strategy.isAlertZone;
-  const isLong = strategy.type === 'LONG';
   const distance = strategy.distancePercent !== undefined ? strategy.distancePercent : 999;
   const symbolClean = strategy.symbol.replace('USDT', '');
 
   return (
-    <div className={`border-b transition-all ${
-      isAlert
+    <div className={`border-b transition-all duration-300 relative ${
+      tpBurstActive
+        ? 'animate-tp-burst border-emerald-400 bg-emerald-950/70 shadow-2xl shadow-emerald-500/30 ring-2 ring-emerald-400'
+        : isTpHit
+        ? 'animate-tp-pulse border-emerald-500/70 bg-emerald-950/35 hover:bg-emerald-950/50 shadow-lg shadow-emerald-500/10'
+        : isAlert
         ? 'bg-blue-950/40 hover:bg-blue-950/60 border-cyan-500/30'
         : 'bg-slate-900/30 hover:bg-slate-900/70 border-slate-800/60'
     }`}>
@@ -90,9 +132,14 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
         {/* Left Section: Rank, Alert Icon, Symbol & Badges */}
         <div className="flex items-center gap-3.5 min-w-[280px]">
           
-          {/* Radar Position / Rank */}
+          {/* Radar Position / Rank / TP Hit Beacon */}
           <div className="flex items-center gap-1.5 w-9 shrink-0">
-            {isAlert ? (
+            {isTpHit ? (
+              <div className="relative flex items-center justify-center">
+                <span className="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-emerald-400 opacity-75"></span>
+                <Target className="w-5 h-5 text-emerald-400 relative z-10 animate-pulse" />
+              </div>
+            ) : isAlert ? (
               <div className="relative flex items-center justify-center">
                 <Target className="w-5 h-5 text-cyan-400 animate-pulse" />
                 <span className="sr-only">Alerta activa</span>
@@ -106,7 +153,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
 
           {/* Symbol & Name */}
           <div className="flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center flex-wrap gap-2">
               <span className="font-bold text-base font-mono text-white tracking-tight flex items-center gap-1">
                 {symbolClean}
                 <span className="text-xs text-slate-500 font-normal">/USDT</span>
@@ -121,6 +168,14 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
                 {isLong ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                 {strategy.type}
               </span>
+
+              {/* TP Crossed Active Badge */}
+              {isTpHit && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-400 text-slate-950 shadow-sm animate-pulse">
+                  <Check className="w-3 h-3 stroke-[3]" />
+                  <span>{highestHitTp?.type || 'TP'} ALCANZADO</span>
+                </span>
+              )}
 
               {/* Status Badge */}
               <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.2 rounded ${
