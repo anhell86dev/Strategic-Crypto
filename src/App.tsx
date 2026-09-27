@@ -7,12 +7,14 @@ import {
   ConnectionStatus, 
   SheetsConfig 
 } from './types';
+import { ActiveFilterRule } from './types/filters';
 import { binanceStream } from './services/binanceService';
 import { SheetsService, DEFAULT_SHEETS_CONFIG } from './services/sheetsService';
 import { audioAlert } from './services/audioService';
 import { Header } from './components/Header';
 import { LegendBanner } from './components/LegendBanner';
 import { RadarStatsBar } from './components/RadarStatsBar';
+import { DynamicFilterBar } from './components/DynamicFilterBar';
 import { StrategyTable } from './components/StrategyTable';
 import { TradeHistoryLog } from './components/TradeHistoryLog';
 import { SheetsConfigModal } from './components/SheetsConfigModal';
@@ -41,10 +43,9 @@ export default function App() {
   // Audio State
   const [soundEnabled, setSoundEnabled] = useState<boolean>(audioAlert.isEnabled());
 
-  // Filter States
+  // Dynamic Composable Filters State
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [directionFilter, setDirectionFilter] = useState<'ALL' | 'LONG' | 'SHORT'>('ALL');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [activeFilters, setActiveFilters] = useState<ActiveFilterRule[]>([]);
 
   // Modal States
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -122,7 +123,25 @@ export default function App() {
     }
   }, [strategies]);
 
-  // Dynamic Radar Engine (Calculate Distance %, Alert Zone & Sort)
+  // Filter Management Handlers
+  const handleAddFilter = (rule: ActiveFilterRule) => {
+    setActiveFilters(prev => {
+      // Replace if same type or append
+      const filtered = prev.filter(f => f.id !== rule.id && f.type !== rule.type);
+      return [...filtered, rule];
+    });
+  };
+
+  const handleRemoveFilter = (filterId: string) => {
+    setActiveFilters(prev => prev.filter(f => f.id !== filterId));
+  };
+
+  const handleClearAllFilters = () => {
+    setActiveFilters([]);
+    setSearchQuery('');
+  };
+
+  // Dynamic Radar Engine (Calculate Distance %, Alert Zone & Dynamic Filters Application)
   const sortedAndFilteredStrategies = useMemo(() => {
     // 1. Group orders by strategy ID
     const ordersMap = new Map<number, TakeProfitOrder[]>();
@@ -168,9 +187,9 @@ export default function App() {
       };
     });
 
-    // 3. Filter by Direction, Status, Search
+    // 3. Apply Dynamic Composable Filters
     const filtered = enhanced.filter(strat => {
-      // Search
+      // A. Text Search
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase().trim();
         const matchesSymbol = strat.symbol.toLowerCase().includes(q);
@@ -179,14 +198,57 @@ export default function App() {
         if (!matchesSymbol && !matchesName && !matchesCategory) return false;
       }
 
-      // Direction
-      if (directionFilter !== 'ALL' && strat.type !== directionFilter) {
-        return false;
-      }
-
-      // Status
-      if (statusFilter !== 'ALL' && strat.status !== statusFilter) {
-        return false;
+      // B. Dynamic Active Filter Rules
+      for (const rule of activeFilters) {
+        switch (rule.type) {
+          case 'DISTANCE_LE': {
+            const maxDist = Number(rule.value);
+            if ((strat.distancePercent ?? 999) > maxDist) return false;
+            break;
+          }
+          case 'DIRECTION': {
+            if (strat.type !== rule.value) return false;
+            break;
+          }
+          case 'STATUS': {
+            if (strat.status !== rule.value) return false;
+            break;
+          }
+          case 'ALERT_ZONE': {
+            if (!strat.isAlertZone) return false;
+            break;
+          }
+          case 'TP_HIT': {
+            const isLong = strat.type === 'LONG';
+            const live = strat.currentPrice || 0;
+            const hasHit = strat.orders.some(tp => {
+              if (!live || !tp.targetPrice) return false;
+              return isLong ? live >= tp.targetPrice : live <= tp.targetPrice;
+            });
+            if (!hasHit) return false;
+            break;
+          }
+          case 'LEVERAGE_GE': {
+            const minLev = Number(rule.value);
+            if ((strat.leverage || 5) < minLev) return false;
+            break;
+          }
+          case 'HAS_DCA': {
+            if (!strat.dcaLevels || strat.dcaLevels.length === 0) return false;
+            break;
+          }
+          case 'PERF_24H': {
+            const pct = strat.priceChangePercent24h || 0;
+            if (rule.value === 'POSITIVE' && pct <= 0) return false;
+            if (rule.value === 'GAINERS_5' && pct < 5) return false;
+            if (rule.value === 'LOSERS' && pct >= 0) return false;
+            break;
+          }
+          case 'CATEGORY': {
+            if (strat.category !== rule.value) return false;
+            break;
+          }
+        }
       }
 
       return true;
@@ -200,7 +262,7 @@ export default function App() {
     });
 
     return filtered;
-  }, [strategies, orders, tickers, searchQuery, directionFilter, statusFilter]);
+  }, [strategies, orders, tickers, searchQuery, activeFilters]);
 
   // Audio Toggle
   const handleToggleSound = () => {
@@ -264,7 +326,7 @@ export default function App() {
         tradeLogs,
         (newEntry) => {
           setTradeLogs(prev => [newEntry, ...prev]);
-          audioAlert.playRadarPing(1050, 0.4); // distinctive fill chime
+          audioAlert.playRadarPing(1050, 0.4);
         }
       );
     }
@@ -347,13 +409,6 @@ export default function App() {
     setIsComparisonOpen(false);
   };
 
-  // Clear filters
-  const handleClearFilters = () => {
-    setSearchQuery('');
-    setDirectionFilter('ALL');
-    setStatusFilter('ALL');
-  };
-
   const alertCount = useMemo(() => {
     return sortedAndFilteredStrategies.filter(s => s.isAlertZone).length;
   }, [sortedAndFilteredStrategies]);
@@ -362,10 +417,10 @@ export default function App() {
     return sortedAndFilteredStrategies.filter(s => selectedStrategyIds.has(s.id));
   }, [sortedAndFilteredStrategies, selectedStrategyIds]);
 
-  const isFiltered = searchQuery !== '' || directionFilter !== 'ALL' || statusFilter !== 'ALL';
+  const isFiltered = searchQuery !== '' || activeFilters.length > 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200 font-sans">
       
       {/* 1. Header / Panel de Control Superior */}
       <Header
@@ -374,12 +429,6 @@ export default function App() {
         lastSyncTime={lastSyncTime}
         isSyncing={isSyncing}
         onManualSync={() => loadStrategiesData(sheetsConfig)}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        directionFilter={directionFilter}
-        onDirectionChange={setDirectionFilter}
-        statusFilter={statusFilter}
-        onStatusChange={setStatusFilter}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAddStrategy={() => setIsAddModalOpen(true)}
         soundEnabled={soundEnabled}
@@ -388,7 +437,7 @@ export default function App() {
       />
 
       {/* 2. Main Body Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-5">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         
         {/* Leyenda Informativa */}
         <LegendBanner alertCount={alertCount} />
@@ -396,12 +445,25 @@ export default function App() {
         {/* Overview KPI Stats Bar */}
         <RadarStatsBar strategies={sortedAndFilteredStrategies} />
 
+        {/* Dynamic Composable Filter Bar */}
+        <DynamicFilterBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          activeFilters={activeFilters}
+          onAddFilter={handleAddFilter}
+          onRemoveFilter={handleRemoveFilter}
+          onClearAllFilters={handleClearAllFilters}
+          strategies={strategies as StrategyWithOrders[]}
+          totalCount={strategies.length}
+          filteredCount={sortedAndFilteredStrategies.length}
+        />
+
         {/* Main Strategy Radar Table */}
         <StrategyTable
           strategies={sortedAndFilteredStrategies}
           totalUnfilteredCount={strategies.length}
           onOpenAddStrategy={() => setIsAddModalOpen(true)}
-          onClearFilters={handleClearFilters}
+          onClearFilters={handleClearAllFilters}
           isFiltered={isFiltered}
           onUpdateThreshold={handleUpdateThreshold}
           onOpenDcaSimulator={(strat) => {
@@ -455,7 +517,7 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-4 px-6 text-xs text-slate-500 text-center font-mono">
+      <footer className="border-t border-slate-900 bg-slate-950 py-5 px-6 text-sm text-slate-400 text-center font-mono">
         Crypto Strategy Radar · Sincronización continua de estrategias y ticks de Binance
       </footer>
 
