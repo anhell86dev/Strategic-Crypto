@@ -18,6 +18,7 @@ import { TradeHistoryLog } from './components/TradeHistoryLog';
 import { SheetsConfigModal } from './components/SheetsConfigModal';
 import { AddStrategyModal } from './components/AddStrategyModal';
 import { DcaSimulatorModal } from './components/DcaSimulatorModal';
+import { MultiStrategyComparisonModal } from './components/MultiStrategyComparisonModal';
 import { INITIAL_STRATEGIES, INITIAL_ORDERS } from './data/initialStrategies';
 import { TradeLogService } from './services/tradeLogService';
 import { proxyService } from './services/proxyService';
@@ -50,6 +51,8 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [selectedStrategyForDca, setSelectedStrategyForDca] = useState<StrategyWithOrders | null>(null);
   const [isDcaModalOpen, setIsDcaModalOpen] = useState<boolean>(false);
+  const [selectedStrategyIds, setSelectedStrategyIds] = useState<Set<number>>(new Set());
+  const [isComparisonOpen, setIsComparisonOpen] = useState<boolean>(false);
 
   // Trade History Log State
   const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>(() => TradeLogService.getLogs());
@@ -308,6 +311,42 @@ export default function App() {
     SheetsService.saveCustomData(updated, orders);
   };
 
+  // Multi-selection handlers
+  const handleToggleSelect = (strategyId: number) => {
+    setSelectedStrategyIds(prev => {
+      const next = new Set(prev);
+      if (next.has(strategyId)) {
+        next.delete(strategyId);
+      } else {
+        next.add(strategyId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    const allFilteredSelected = sortedAndFilteredStrategies.length > 0 && 
+      sortedAndFilteredStrategies.every(s => selectedStrategyIds.has(s.id));
+    if (allFilteredSelected) {
+      setSelectedStrategyIds(new Set());
+    } else {
+      setSelectedStrategyIds(new Set(sortedAndFilteredStrategies.map(s => s.id)));
+    }
+  };
+
+  const handleRemoveFromComparison = (id: number) => {
+    setSelectedStrategyIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedStrategyIds(new Set());
+    setIsComparisonOpen(false);
+  };
+
   // Clear filters
   const handleClearFilters = () => {
     setSearchQuery('');
@@ -318,6 +357,10 @@ export default function App() {
   const alertCount = useMemo(() => {
     return sortedAndFilteredStrategies.filter(s => s.isAlertZone).length;
   }, [sortedAndFilteredStrategies]);
+
+  const selectedStrategiesForComparison = useMemo(() => {
+    return sortedAndFilteredStrategies.filter(s => selectedStrategyIds.has(s.id));
+  }, [sortedAndFilteredStrategies, selectedStrategyIds]);
 
   const isFiltered = searchQuery !== '' || directionFilter !== 'ALL' || statusFilter !== 'ALL';
 
@@ -365,6 +408,10 @@ export default function App() {
             setSelectedStrategyForDca(strat);
             setIsDcaModalOpen(true);
           }}
+          selectedIds={selectedStrategyIds}
+          onToggleSelect={handleToggleSelect}
+          onToggleSelectAll={handleToggleSelectAll}
+          onOpenComparison={() => setIsComparisonOpen(true)}
         />
 
         {/* Chronological Trade History Log (Filled Alerts Tracker) */}
@@ -397,6 +444,14 @@ export default function App() {
         isOpen={isDcaModalOpen}
         onClose={() => setIsDcaModalOpen(false)}
         strategy={selectedStrategyForDca}
+      />
+
+      <MultiStrategyComparisonModal
+        isOpen={isComparisonOpen}
+        onClose={() => setIsComparisonOpen(false)}
+        strategies={selectedStrategiesForComparison}
+        onRemoveStrategy={handleRemoveFromComparison}
+        onClearSelection={handleClearSelection}
       />
 
       {/* Footer */}

@@ -20,13 +20,17 @@ interface StrategyRowProps {
   rankIndex: number;
   onUpdateThreshold?: (strategyId: number, threshold: number) => void;
   onOpenDcaSimulator?: (strategy: StrategyWithOrders) => void;
+  isSelected?: boolean;
+  onToggleSelect?: (strategyId: number) => void;
 }
 
 export const StrategyRow: React.FC<StrategyRowProps> = ({ 
   strategy, 
   rankIndex,
   onUpdateThreshold,
-  onOpenDcaSimulator
+  onOpenDcaSimulator,
+  isSelected = false,
+  onToggleSelect
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -129,11 +133,29 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
         className="px-3 sm:px-5 py-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 cursor-pointer select-none"
       >
         
-        {/* Left Section: Rank, Alert Icon, Symbol & Badges */}
-        <div className="flex items-center gap-3.5 min-w-[280px]">
+        {/* Left Section: Checkbox, Rank, Alert Icon, Symbol & Badges */}
+        <div className="flex items-center gap-3 min-w-[290px]">
           
+          {/* Multi-Selection Checkbox */}
+          {onToggleSelect && (
+            <div 
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSelect(strategy.id);
+              }}
+              className="p-1 -ml-1 rounded hover:bg-slate-800/80 cursor-pointer transition-colors"
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => {}} // Handled by container click for better click area
+                className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+              />
+            </div>
+          )}
+
           {/* Radar Position / Rank / TP Hit Beacon */}
-          <div className="flex items-center gap-1.5 w-9 shrink-0">
+          <div className="flex items-center gap-1.5 w-8 shrink-0">
             {isTpHit ? (
               <div className="relative flex items-center justify-center">
                 <span className="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-emerald-400 opacity-75"></span>
@@ -145,7 +167,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
                 <span className="sr-only">Alerta activa</span>
               </div>
             ) : (
-              <span className="text-xs font-mono font-bold text-slate-500 pl-1">
+              <span className="text-xs font-mono font-bold text-slate-500 pl-0.5">
                 #{rankIndex + 1}
               </span>
             )}
