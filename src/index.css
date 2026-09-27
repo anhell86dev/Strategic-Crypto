@@ -156,6 +156,104 @@
   animation: tp-cross-pulse 1.2s ease-out;
 }
 
+/* Multi-Timeframe Directional Flow Animations */
+@keyframes laser-beam-right {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.9;
+  }
+  75% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes laser-beam-left {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.9;
+  }
+  75% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+@keyframes dash-flow {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes chevron-flow-right {
+  0% {
+    background-position: 0px 0;
+  }
+  100% {
+    background-position: 24px 0;
+  }
+}
+
+@keyframes chevron-flow-left {
+  0% {
+    background-position: 24px 0;
+  }
+  100% {
+    background-position: 0px 0;
+  }
+}
+
+.animate-dash-flow {
+  animation: dash-flow 1.2s linear infinite;
+}
+
+.animate-laser-right {
+  animation: laser-beam-right 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-laser-left {
+  animation: laser-beam-left 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-flow-stripes-right {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0px,
+    rgba(255, 255, 255, 0.12) 6px,
+    rgba(255, 255, 255, 0.25) 12px,
+    rgba(255, 255, 255, 0) 18px
+  );
+  background-size: 24px 100%;
+  animation: chevron-flow-right 1.2s linear infinite;
+}
+
+.animate-flow-stripes-left {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0px,
+    rgba(255, 255, 255, 0.25) 6px,
+    rgba(255, 255, 255, 0.12) 12px,
+    rgba(255, 255, 255, 0) 18px
+  );
+  background-size: 24px 100%;
+  animation: chevron-flow-left 1.2s linear infinite;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 8px;

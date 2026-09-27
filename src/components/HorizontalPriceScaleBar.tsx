@@ -6,7 +6,8 @@ import {
   Activity, 
   AlertTriangle, 
   Clock, 
-  GitBranch
+  GitBranch,
+  Layers
 } from 'lucide-react';
 
 interface HorizontalPriceScaleBarProps {
@@ -150,23 +151,30 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
     };
   }, [pubInfo, entryPrice, livePrice]);
 
-  // Compute unified price range bounds for the continuous scale
+  // LA ESCALA LA MANDA EL DIARIO: Los límites de la barra horizontal los gobierna el Diario
   const { minScale, maxScale, scaleSpan } = useMemo(() => {
-    const allPrices = [livePrice, entryPrice, stopLoss, tp1, tp2, tp3];
-    if (tfData?.candles) {
-      Object.values(tfData.candles).forEach(c => {
-        allPrices.push(c.open, c.close, c.high, c.low);
-      });
-    }
+    const dailyCandle = tfData?.candles?.['1d'];
+    const dOpen = dailyCandle?.open || (livePrice * 1.044);
+    const dClose = dailyCandle?.close || livePrice;
+    const dHigh = dailyCandle?.high || Math.max(dOpen, dClose, livePrice * 1.045);
+    const dLow = dailyCandle?.low || Math.min(dOpen, dClose, livePrice * 0.955);
 
-    const min = Math.min(...allPrices.filter(p => p > 0));
-    const max = Math.max(...allPrices.filter(p => p > 0));
-    const padding = (max - min) * 0.08 || min * 0.02;
+    // Rango rector del Diario
+    const dailyMin = Math.min(dOpen, dClose, dLow);
+    const dailyMax = Math.max(dOpen, dClose, dHigh);
+
+    // Integrar niveles clave para evitar que queden fuera
+    const keyPrices = [livePrice, entryPrice, stopLoss, tp1, tp2, tp3].filter(p => p > 0);
+    const overallMin = Math.min(dailyMin, ...keyPrices);
+    const overallMax = Math.max(dailyMax, ...keyPrices);
+
+    // Margen sutil del 3% en los extremos
+    const padding = (overallMax - overallMin) * 0.03 || overallMin * 0.01;
 
     return {
-      minScale: Math.max(0, min - padding),
-      maxScale: max + padding,
-      scaleSpan: Math.max(0.000001, (max + padding) - (min - padding))
+      minScale: Math.max(0, overallMin - padding),
+      maxScale: overallMax + padding,
+      scaleSpan: Math.max(0.000001, (overallMax + padding) - (overallMin - padding))
     };
   }, [livePrice, entryPrice, stopLoss, tp1, tp2, tp3, tfData]);
 
@@ -183,14 +191,13 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   const tp2Pos = getPercentPos(tp2);
   const tp3Pos = getPercentPos(tp3);
 
-  // Timeframe Rows strictly ordered from top to bottom as requested:
+  // Timeframe Rows strictly ordered from top to bottom:
   // 1. Horas transcurridas (PUB)
   // 2. 5M
   // 3. 15M
   // 4. 1H
   // 5. 4H
-  // 6. DIARIO
-  // (2H and 3H removed)
+  // 6. DIARIO (Escala rectora, sin conectar)
   const timeframesList = useMemo(() => {
     const candles = tfData?.candles || {};
     return [
@@ -199,13 +206,18 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
       { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: livePrice * 0.9997, close: livePrice, changePercent: 0.03 }), durationMinutes: 15 },
       { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: livePrice * 0.9984, close: livePrice, changePercent: 0.16 }), durationMinutes: 60 },
       { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: livePrice * 1.0095, close: livePrice, changePercent: -0.95 }), durationMinutes: 240 },
-      { ...(candles['1d'] || { timeframe: '1d', label: 'DIARIO', timeStr: 'Hoy', open: livePrice * 1.0440, close: livePrice, changePercent: -4.40 }), durationMinutes: 1440 }
+      { ...(candles['1d'] || { timeframe: '1d', label: 'DIARIO', timeStr: 'Hoy', open: livePrice * 1.0440, close: livePrice, changePercent: -4.40 }), durationMinutes: 1440, isMasterScale: true }
     ];
   }, [tfData, livePrice, pubCandle]);
 
-  // Compute connections: The close of the higher timeframe connects to the open of the next lower timeframe
+  // UNIONES: Solo se conectan [Horas transcurridas, 5m, 15m, 1h, 4h].
+  // El DIARIO NO SE DEBE CONECTAR.
   const connections = useMemo(() => {
     if (!showConnectors || timeframesList.length < 2) return [];
+
+    // Filtrar estrictamente solo las temporalidades a conectar (sin incluir el Diario)
+    const connectedList = timeframesList.filter(tf => tf.timeframe !== '1d');
+    const totalRows = timeframesList.length;
 
     const conns: {
       fromIndex: number;
@@ -218,23 +230,23 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
       lowerLabel: string;
     }[] = [];
 
-    const totalRows = timeframesList.length;
+    for (let i = 0; i < connectedList.length - 1; i++) {
+      const current = connectedList[i];
+      const next = connectedList[i + 1];
 
-    for (let i = 0; i < totalRows - 1; i++) {
-      const current = timeframesList[i];
-      const next = timeframesList[i + 1];
+      const currentIndex = timeframesList.indexOf(current);
+      const nextIndex = timeframesList.indexOf(next);
 
       const durCurrent = (current as any).durationMinutes || (current.timeframe === 'pub' ? pubInfo.hours * 60 : 0);
       const durNext = (next as any).durationMinutes || (next.timeframe === 'pub' ? pubInfo.hours * 60 : 0);
 
-      // Determine which one is higher in duration
+      // Cierre de la temporalidad mayor -> Apertura de la menor
       const isCurrentHigher = durCurrent >= durNext;
       const higherTF = isCurrentHigher ? current : next;
       const lowerTF = isCurrentHigher ? next : current;
-      const higherIndex = isCurrentHigher ? i : i + 1;
-      const lowerIndex = isCurrentHigher ? i + 1 : i;
+      const higherIndex = isCurrentHigher ? currentIndex : nextIndex;
+      const lowerIndex = isCurrentHigher ? nextIndex : currentIndex;
 
-      // Close of higher -> Open of lower
       const x1 = getPercentPos(higherTF.close);
       const y1 = ((higherIndex + 0.5) / totalRows) * 100;
 
@@ -313,7 +325,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           {/* Toggle Unir Recorridos */}
           <button
             onClick={() => setShowConnectors(!showConnectors)}
-            title="Conectar el Cierre de la temporalidad mayor con la Apertura de la menor"
+            title="Conectar el Cierre de la mayor con la Apertura de la menor (PUB, 5M, 15M, 1H, 4H)"
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all cursor-pointer text-xs font-bold ${
               showConnectors 
                 ? 'bg-cyan-950 text-cyan-300 border-cyan-500/60 shadow-sm shadow-cyan-500/20' 
@@ -363,13 +375,14 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
             {showConnectors && (
               <span className="flex items-center gap-1.5 text-cyan-300 font-bold">
                 <span className="inline-block w-4 h-0.5 border-t-2 border-dashed border-cyan-400" /> 
-                Unión: Cierre (Mayor) ➔ Apertura (Menor)
+                Unión: Cierre (Mayor) ➔ Apertura (Menor) [PUB · 5M · 15M · 1H · 4H]
               </span>
             )}
           </div>
 
-          <span className="text-[10px] text-slate-500">
-            Escala Unificada: {formatPrice(minScale)} — {formatPrice(maxScale)}
+          <span className="text-[10px] text-amber-300 font-mono font-bold flex items-center gap-1 bg-amber-950/50 px-2 py-0.5 rounded border border-amber-500/30">
+            <Layers className="w-3 h-3 text-amber-400" />
+            Escala Rectora: DIARIO ({formatPrice(minScale)} — {formatPrice(maxScale)})
           </span>
         </div>
 
@@ -377,15 +390,30 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
         <div className="relative pt-6 pb-7">
           
           {/* Pista Gradiente de Fondo */}
-          <div className="h-3 rounded-full bg-gradient-to-r from-rose-950 via-slate-800 to-emerald-950 border border-slate-700/80 relative shadow-inner">
-            {/* Zona Activa entre Entrada y Live */}
+          <div className="h-3 rounded-full bg-gradient-to-r from-rose-950 via-slate-800 to-emerald-950 border border-slate-700/80 relative shadow-inner overflow-hidden">
+            {/* Zona Activa entre Entrada y Live con animación direccional */}
             <div 
-              className="absolute top-0 bottom-0 rounded-full bg-gradient-to-r from-cyan-500/40 to-emerald-500/40"
+              className={`absolute top-0 bottom-0 rounded-full overflow-hidden ${
+                pnlPercent >= 0 
+                  ? 'bg-gradient-to-r from-cyan-500/50 via-emerald-500/60 to-emerald-400/80 shadow-md shadow-emerald-500/20' 
+                  : 'bg-gradient-to-r from-rose-500/70 via-rose-500/60 to-amber-500/50 shadow-md shadow-rose-500/20'
+              }`}
               style={{ 
                 left: `${Math.min(livePos, entryPos)}%`, 
                 width: `${Math.abs(livePos - entryPos)}%` 
               }}
-            />
+            >
+              <div 
+                className={`absolute inset-0 pointer-events-none opacity-40 ${
+                  livePos >= entryPos ? 'animate-flow-stripes-right' : 'animate-flow-stripes-left'
+                }`} 
+              />
+              <div 
+                className={`absolute inset-0 pointer-events-none bg-gradient-to-r from-transparent via-white/40 to-transparent ${
+                  livePos >= entryPos ? 'animate-laser-right' : 'animate-laser-left'
+                }`} 
+              />
+            </div>
           </div>
 
           {/* Marcador 1: Stop Loss */}
@@ -475,18 +503,26 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
               {timeframesList.map((tf) => {
                 const isUp = tf.changePercent >= 0;
                 const isPub = (tf as any).isPublicationTimeframe;
+                const isDiario = tf.timeframe === '1d';
 
                 return (
                   <div 
                     key={tf.timeframe}
                     className={`h-7 flex items-center justify-between px-2 rounded-lg font-mono text-xs border ${
-                      isPub 
+                      isDiario
+                        ? 'bg-amber-950/40 border-amber-500/40 text-amber-200 shadow-sm shadow-amber-500/10'
+                        : isPub 
                         ? 'bg-cyan-950/50 border-cyan-500/50 text-cyan-200 shadow-sm shadow-cyan-500/10' 
                         : 'bg-slate-950/80 border-slate-800/80 text-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 overflow-hidden">
-                      {isPub ? (
+                      {isDiario ? (
+                        <span className="font-black text-amber-300 text-xs flex items-center gap-1">
+                          <Layers className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span>{tf.label}</span>
+                        </span>
+                      ) : isPub ? (
                         <span className="font-black text-cyan-300 text-xs flex items-center gap-1">
                           <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
                           <span className="truncate">{tf.label}</span>
@@ -524,7 +560,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                 style={{ left: `${slPos}%` }}
               />
 
-              {/* CAPA SVG: UNE EL CIERRE DE LA TEMPORALIDAD MAYOR CON LA APERTURA DE LA MENOR */}
+              {/* CAPA SVG: UNE EL CIERRE DE LA TEMPORALIDAD MAYOR CON LA APERTURA DE LA MENOR (SIN EL DIARIO) */}
               {showConnectors && (
                 <svg 
                   className="absolute inset-0 w-full h-full pointer-events-none z-15 overflow-visible"
@@ -555,13 +591,14 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                           vectorEffect="non-scaling-stroke"
                         />
 
-                        {/* Clean dashed connector line */}
+                        {/* Animated flowing dashed connector line */}
                         <path
                           d={pathD}
                           fill="none"
                           stroke="url(#connectorGlow)"
                           strokeWidth="1.5"
                           strokeDasharray="4 3"
+                          className="animate-dash-flow"
                           vectorEffect="non-scaling-stroke"
                         />
                       </g>
@@ -570,7 +607,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                 </svg>
               )}
 
-              {/* Renderizado de cada pista horizontal con círculos nativos perfectamente redondos */}
+              {/* Renderizado de cada pista horizontal con animación de dirección */}
               {timeframesList.map((tf) => {
                 const isUp = tf.changePercent >= 0;
                 const openPos = getPercentPos(tf.open);
@@ -578,16 +615,25 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                 const barLeft = Math.min(openPos, closePos);
                 const barWidth = Math.max(2.5, Math.abs(closePos - openPos));
                 const isPub = (tf as any).isPublicationTimeframe;
+                const isDiario = tf.timeframe === '1d';
 
                 return (
                   <div 
                     key={tf.timeframe}
-                    className="h-7 relative bg-slate-900/90 rounded-md border border-slate-800/70 overflow-hidden flex items-center"
+                    className={`h-7 relative rounded-md overflow-hidden flex items-center border transition-all ${
+                      isDiario 
+                        ? 'bg-slate-900/95 border-amber-500/40 ring-1 ring-amber-500/20' 
+                        : 'bg-slate-900/90 border-slate-800/70'
+                    }`}
                   >
-                    {/* Cuerpo de la vela / rango */}
+                    {/* Cuerpo de la vela / rango con animación de dirección */}
                     <div 
-                      className={`h-2.5 rounded-full absolute transition-all duration-300 ${
-                        isPub
+                      className={`h-3 rounded-full absolute overflow-hidden transition-all duration-300 ${
+                        isDiario
+                          ? (isUp 
+                              ? 'bg-gradient-to-r from-amber-400 via-emerald-400 to-emerald-300 shadow-md shadow-emerald-500/30' 
+                              : 'bg-gradient-to-r from-amber-400 via-rose-500 to-rose-400 shadow-md shadow-rose-500/30')
+                          : isPub
                           ? (isUp 
                               ? 'bg-gradient-to-r from-cyan-400 via-emerald-400 to-emerald-300 shadow-md shadow-cyan-500/30' 
                               : 'bg-gradient-to-r from-cyan-400 via-rose-500 to-rose-400 shadow-md shadow-rose-500/30')
@@ -596,25 +642,51 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                               : 'bg-gradient-to-r from-amber-400 via-rose-500 to-rose-400 shadow-sm shadow-rose-500/20')
                       }`}
                       style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
-                    />
+                    >
+                      {/* Capa 1: Rayas animadas que fluyen hacia la dirección del precio */}
+                      <div 
+                        className={`absolute inset-0 pointer-events-none opacity-40 ${
+                          isUp ? 'animate-flow-stripes-right' : 'animate-flow-stripes-left'
+                        }`} 
+                      />
 
-                    {/* Punto Apertura: Círculo limpio redondo */}
+                      {/* Capa 2: Haz de luz dinámico (laser pulse) recorriendo desde Apertura a Cierre */}
+                      <div 
+                        className={`absolute inset-0 pointer-events-none bg-gradient-to-r from-transparent via-white/50 to-transparent ${
+                          isUp ? 'animate-laser-right' : 'animate-laser-left'
+                        }`} 
+                      />
+                    </div>
+
+                    {/* Punto Apertura: Círculo limpio redondo con borde de anclaje */}
                     <div 
                       className={`absolute w-3 h-3 rounded-full border border-slate-950 z-20 shadow-xs ${
-                        isPub ? 'bg-cyan-300 ring-2 ring-cyan-500/50' : 'bg-amber-400'
+                        isDiario 
+                          ? 'bg-amber-300 ring-2 ring-amber-400/40' 
+                          : isPub 
+                          ? 'bg-cyan-300 ring-2 ring-cyan-500/50' 
+                          : 'bg-amber-400'
                       }`}
                       style={{ left: `${openPos}%`, transform: 'translateX(-50%)' }}
                       title={`${tf.label} Apertura: ${formatPrice(tf.open)}`}
                     />
 
-                    {/* Punto Cierre: Círculo limpio redondo */}
+                    {/* Punto Cierre: Círculo dinámico con beacon pulse que indica la punta del movimiento */}
                     <div 
-                      className={`absolute w-3 h-3 rounded-full border border-slate-950 z-20 shadow-sm ${
-                        isUp ? 'bg-emerald-400' : 'bg-rose-400'
-                      }`}
+                      className="absolute w-3.5 h-3.5 z-20 flex items-center justify-center pointer-events-auto"
                       style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
-                      title={`${tf.label} Cierre: ${formatPrice(tf.close)}`}
-                    />
+                      title={`${tf.label} Cierre: ${formatPrice(tf.close)} (${isUp ? 'Alcista ➔' : 'Bajista ⬅'})`}
+                    >
+                      {/* Pulse animado direccional */}
+                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                        isUp ? 'bg-emerald-400' : 'bg-rose-400'
+                      }`} />
+                      
+                      {/* Círculo sólido principal */}
+                      <span className={`relative inline-flex rounded-full w-3 h-3 border border-slate-950 shadow-sm ${
+                        isUp ? 'bg-emerald-400' : 'bg-rose-400'
+                      }`} />
+                    </div>
 
                   </div>
                 );
