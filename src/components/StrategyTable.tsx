@@ -27,6 +27,7 @@ interface StrategyTableProps {
   onToggleSelect?: (id: number) => void;
   onToggleSelectAll?: () => void;
   onOpenComparison?: () => void;
+  onStatusUpdated?: (strategyId: number, newStatus: string) => void;
 }
 
 export const StrategyTable: React.FC<StrategyTableProps> = ({
@@ -40,7 +41,8 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
   selectedIds = new Set(),
   onToggleSelect,
   onToggleSelectAll,
-  onOpenComparison
+  onOpenComparison,
+  onStatusUpdated
 }) => {
   const isAllSelected = strategies.length > 0 && strategies.every(s => selectedIds.has(s.id));
   const selectedCount = selectedIds.size;
@@ -146,8 +148,8 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
           <div className="flex-1 px-4 text-center">
             2. Escala de Precios Horizontal (Stop Loss · Entrada · Precio Live · Take Profits)
           </div>
-          <div className="w-36 text-right">
-            Acciones
+          <div className="w-56 text-right">
+            Acciones & Análisis
           </div>
         </div>
 
@@ -162,6 +164,7 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
               onOpenDcaSimulator={onOpenDcaSimulator}
               isSelected={selectedIds.has(strategy.id)}
               onToggleSelect={onToggleSelect}
+              onStatusUpdated={onStatusUpdated}
             />
           ))}
         </div>

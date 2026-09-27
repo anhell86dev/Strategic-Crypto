@@ -503,7 +503,8 @@ export class SheetsService {
         lossCapa3,
         tacticalRules,
         tradeDiscipline,
-        status
+        status,
+        rowIndex: index + 1 // Row 1 is header, data rows start at 2
       });
 
       // TPs

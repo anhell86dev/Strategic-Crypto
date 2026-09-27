@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StrategyWithOrders } from '../types';
 import { TakeProfitAccordion } from './TakeProfitAccordion';
 import { HorizontalPriceTrack } from './HorizontalPriceTrack';
+import { StrategyAnalysisModal } from './StrategyAnalysisModal';
 import { calculateRiskReward } from '../utils/riskReward';
 import { 
   Target, 
@@ -16,7 +17,8 @@ import {
   Check,
   Percent,
   Scale,
-  Clock
+  Clock,
+  SearchCode
 } from 'lucide-react';
 
 export const formatStrategyPublicationDate = (rawDate?: string, stratName?: string): string => {
@@ -129,6 +131,7 @@ interface StrategyRowProps {
   onOpenDcaSimulator?: (strategy: StrategyWithOrders) => void;
   isSelected?: boolean;
   onToggleSelect?: (strategyId: number) => void;
+  onStatusUpdated?: (strategyId: number, newStatus: string) => void;
 }
 
 export const StrategyRow: React.FC<StrategyRowProps> = ({ 
@@ -137,9 +140,11 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
   onUpdateThreshold,
   onOpenDcaSimulator,
   isSelected = false,
-  onToggleSelect
+  onToggleSelect,
+  onStatusUpdated
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [flashClass, setFlashClass] = useState<string>('');
   const [tpBurstActive, setTpBurstActive] = useState<boolean>(false);
@@ -378,6 +383,19 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             <span>{isExpanded ? 'Ocultar' : 'Escala & Matriz'}</span>
             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
+
+          {/* Botón Analizar al final de la columna Acciones */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsAnalysisOpen(true);
+            }}
+            title="Analizar según hora de publicación vs tiempo actual y verificar toques en SL, E1-E3 y TP"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-black text-slate-950 bg-gradient-to-r from-cyan-400 to-blue-400 hover:from-cyan-300 hover:to-blue-300 rounded-xl transition-all shadow-md shadow-cyan-500/20 active:scale-95 cursor-pointer shrink-0"
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span>Analizar</span>
+          </button>
         </div>
 
       </div>
@@ -388,6 +406,16 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
           strategy={strategy}
           onUpdateThreshold={onUpdateThreshold}
           onOpenDcaSimulator={onOpenDcaSimulator}
+        />
+      )}
+
+      {/* Modal Emergente de Análisis */}
+      {isAnalysisOpen && (
+        <StrategyAnalysisModal
+          strategy={strategy}
+          isOpen={isAnalysisOpen}
+          onClose={() => setIsAnalysisOpen(false)}
+          onStatusUpdated={onStatusUpdated}
         />
       )}
     </div>

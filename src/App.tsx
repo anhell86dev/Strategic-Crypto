@@ -380,6 +380,18 @@ export default function App() {
     SheetsService.saveCustomData(updated, orders);
   };
 
+  // Status update handler (AN cell from Analysis Modal)
+  const handleStatusUpdated = (strategyId: number, newStatus: string) => {
+    const updated = strategies.map(s => {
+      if (s.id === strategyId) {
+        return { ...s, status: newStatus };
+      }
+      return s;
+    });
+    setStrategies(updated);
+    SheetsService.saveCustomData(updated, orders);
+  };
+
   // Multi-selection handlers
   const handleToggleSelect = (strategyId: number) => {
     setSelectedStrategyIds(prev => {
@@ -481,6 +493,7 @@ export default function App() {
           onToggleSelect={handleToggleSelect}
           onToggleSelectAll={handleToggleSelectAll}
           onOpenComparison={() => setIsComparisonOpen(true)}
+          onStatusUpdated={handleStatusUpdated}
         />
 
         {/* Chronological Trade History Log (Filled Alerts Tracker) */}
