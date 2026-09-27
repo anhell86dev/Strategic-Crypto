@@ -188,20 +188,20 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   const tp3Pos = getPercentPos(tp3);
 
   // Timeframe Rows strictly ordered from top to bottom:
-  // 1. Horas transcurridas (PUB - Dinámica)
-  // 2. 5M (Cerrada)
-  // 3. 15M (Cerrada)
-  // 4. 1H (Cerrada)
-  // 5. 4H (Cerrada)
-  // 6. DIARIO (Escala rectora que llena toda la barra con su trayectoria)
+  // 1. Horas transcurridas (PUB - Dinámica con Círculo LIVE)
+  // 2. 5M (Cerrada - Pasado del precio)
+  // 3. 15M (Cerrada - Pasado del precio)
+  // 4. 1H (Cerrada - Pasado del precio)
+  // 5. 4H (Cerrada - Pasado del precio)
+  // 6. DIARIO (Escala rectora con Círculo LIVE)
   const timeframesList = useMemo(() => {
     const candles = tfData?.candles || {};
     return [
       pubCandle,
-      { ...(candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: livePrice * 0.9985, close: livePrice, changePercent: 0.15 }), durationMinutes: 5, isClosed: true },
-      { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: livePrice * 0.9997, close: livePrice, changePercent: 0.03 }), durationMinutes: 15, isClosed: true },
-      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: livePrice * 0.9984, close: livePrice, changePercent: 0.16 }), durationMinutes: 60, isClosed: true },
-      { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: livePrice * 1.0095, close: livePrice, changePercent: -0.95 }), durationMinutes: 240, isClosed: true },
+      { ...(candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: livePrice * 0.9980, close: livePrice * 0.9995, changePercent: 0.15 }), durationMinutes: 5, isClosed: true },
+      { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: livePrice * 0.9960, close: livePrice * 0.9980, changePercent: 0.20 }), durationMinutes: 15, isClosed: true },
+      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: livePrice * 0.9920, close: livePrice * 0.9960, changePercent: 0.40 }), durationMinutes: 60, isClosed: true },
+      { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: livePrice * 1.0060, close: livePrice * 0.9920, changePercent: -1.39 }), durationMinutes: 240, isClosed: true },
       { 
         timeframe: '1d', 
         label: 'DIARIO', 
@@ -212,7 +212,8 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
         low: dLow, 
         changePercent: dChange, 
         durationMinutes: 1440, 
-        isMasterScale: true 
+        isMasterScale: true,
+        isDynamic: true
       }
     ];
   }, [tfData, livePrice, pubCandle, dOpen, dClose, dHigh, dLow, dChange]);
@@ -365,7 +366,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
         
         {/* Leyenda interactiva de puntos y uniones */}
         <div className="flex items-center justify-between flex-wrap gap-2 text-[11px] font-mono text-slate-400 bg-slate-950/70 px-3 py-1.5 rounded-xl border border-slate-800/80">
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3.5 flex-wrap">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shadow-sm" /> Apertura (O)
             </span>
@@ -375,8 +376,12 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block shadow-sm" /> Cierre Bajista (C)
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-sm" /> Publicación (Dinámica)
+            <span className="flex items-center gap-1.5 text-cyan-300 font-bold">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-400 border border-slate-950" />
+              </span>
+              Precio LIVE (Solo PUB y Diario)
             </span>
             <span className="flex items-center gap-1.5 text-slate-400">
               <span className="w-3 h-2 rounded bg-slate-700/80 inline-block border border-slate-600" /> Rango Diario (Gris)
@@ -753,22 +758,34 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                       title={`${tf.label} Apertura: ${formatPrice(tf.open)}`}
                     />
 
-                    {/* Punto Cierre: Círculo dinámico con beacon pulse */}
-                    <div 
-                      className="absolute w-3.5 h-3.5 z-20 flex items-center justify-center pointer-events-auto"
-                      style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
-                      title={`${tf.label} Cierre: ${formatPrice(tf.close)} (${isUp ? 'Alcista ➔' : 'Bajista ⬅'})`}
-                    >
-                      {/* Pulse animado direccional */}
-                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                        isUp ? 'bg-emerald-400' : 'bg-rose-400'
-                      }`} />
-                      
-                      {/* Círculo sólido principal */}
-                      <span className={`relative inline-flex rounded-full w-3 h-3 border border-slate-950 shadow-sm ${
-                        isUp ? 'bg-emerald-400' : 'bg-rose-400'
-                      }`} />
-                    </div>
+                    {/* Punto Cierre:
+                        - SOLO DIARIO Y PUB TIENEN EL CÍRCULO DE PRECIO LIVE CON PULSO
+                        - 5M, 15M, 1H, 4H TIENEN CÍRCULO ESTÁTICO DE CIERRE PASADO (SIN LIVE) */}
+                    {(isDiario || isPub) ? (
+                      <div 
+                        className="absolute w-3.5 h-3.5 z-20 flex items-center justify-center pointer-events-auto"
+                        style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
+                        title={`${tf.label} Precio LIVE: ${formatPrice(tf.close)} (${isUp ? 'Alcista ➔' : 'Bajista ⬅'})`}
+                      >
+                        {/* Pulse animado direccional LIVE */}
+                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                          isPub ? 'bg-cyan-400' : (isUp ? 'bg-emerald-400' : 'bg-rose-400')
+                        }`} />
+                        
+                        {/* Círculo sólido principal LIVE */}
+                        <span className={`relative inline-flex rounded-full w-3.5 h-3.5 border-2 border-slate-950 shadow-md ${
+                          isPub ? 'bg-cyan-300 ring-2 ring-cyan-500/60' : (isUp ? 'bg-emerald-400' : 'bg-rose-400')
+                        }`} />
+                      </div>
+                    ) : (
+                      <div 
+                        className={`absolute w-3 h-3 rounded-full border border-slate-950 z-20 shadow-xs ${
+                          isUp ? 'bg-emerald-400' : 'bg-rose-400'
+                        }`}
+                        style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
+                        title={`${tf.label} Cierre Pasado (Cerrado): ${formatPrice(tf.close)}`}
+                      />
+                    )}
 
                   </div>
                 );
