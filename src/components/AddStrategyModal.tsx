@@ -26,6 +26,7 @@ export const AddStrategyModal: React.FC<AddStrategyModalProps> = ({
   const [stopLoss, setStopLoss] = useState<string>('116.00');
   const [status, setStatus] = useState<'Active' | 'Pending'>('Active');
   const [category, setCategory] = useState('Layer 1');
+  const [customThreshold, setCustomThreshold] = useState<string>('1.5');
   const [notes, setNotes] = useState('Rebote en soporte de 4H.');
 
   const [tps, setTps] = useState<{ type: string; targetPrice: string; closePercentage: string }[]>([
@@ -59,6 +60,8 @@ export const AddStrategyModal: React.FC<AddStrategyModalProps> = ({
     if (isNaN(entry) || entry <= 0 || !symbol) return;
 
     const newId = Date.now();
+    const customT = parseFloat(customThreshold);
+
     const newStrategy: Strategy = {
       id: newId,
       symbol: symbol.toUpperCase().trim(),
@@ -69,7 +72,8 @@ export const AddStrategyModal: React.FC<AddStrategyModalProps> = ({
       date: new Date().toISOString().split('T')[0],
       status,
       category,
-      notes
+      notes,
+      customAlertThreshold: (!isNaN(customT) && customT > 0) ? customT : 1.5
     };
 
     const newOrders: TakeProfitOrder[] = tps
@@ -210,8 +214,8 @@ export const AddStrategyModal: React.FC<AddStrategyModalProps> = ({
             </div>
           </div>
 
-          {/* Status & Category */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Status, Category & Custom Alert Threshold */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-semibold text-slate-200 mb-1">
                 Estado
@@ -236,6 +240,23 @@ export const AddStrategyModal: React.FC<AddStrategyModalProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 placeholder="Layer 1, DeFi, AI..."
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:border-cyan-500 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-200 mb-1 flex items-center justify-between">
+                <span>Umbral Alerta (%)</span>
+                <span className="text-[10px] text-cyan-400 font-mono font-normal">Default: 1.5%</span>
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                max="20"
+                value={customThreshold}
+                onChange={(e) => setCustomThreshold(e.target.value)}
+                placeholder="1.5"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-mono focus:border-cyan-500 outline-none"
               />
             </div>
           </div>

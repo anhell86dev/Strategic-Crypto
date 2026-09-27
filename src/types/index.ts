@@ -1,3 +1,21 @@
+export interface DcaLevel {
+  level: string; // e.g. "E2 DCA", "E3 Carga"
+  price: number;
+  allocationPercent: number; // e.g. 30 (means 30%)
+  label: string; // e.g. "Soporte 1", "Piso Extremo"
+}
+
+export interface TimeframeCandle {
+  timeframe: string; // "5m", "15m", "1h", "2h", "3h", "4h", "1d"
+  label: string; // e.g. "5M", "15M", "1H / ACTUAL", "2H", "3H", "4H", "DIARIO"
+  timeStr: string; // e.g. "00:25", "Hoy"
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  changePercent: number;
+}
+
 export interface Strategy {
   id: number;
   symbol: string; // e.g. "BTCUSDT"
@@ -9,6 +27,10 @@ export interface Strategy {
   status: 'Active' | 'Pending' | 'Completed';
   category?: string;
   notes?: string;
+  customAlertThreshold?: number; // e.g. 1.0 (means 1.0% threshold instead of default 1.5%)
+  leverage?: number; // e.g. 5 (5x)
+  initialAllocation?: number; // e.g. 50 (%)
+  dcaLevels?: DcaLevel[];
 }
 
 export interface TakeProfitOrder {
@@ -16,6 +38,7 @@ export interface TakeProfitOrder {
   type: string; // e.g. "TP1", "TP2", "TP3", "TP4"
   targetPrice: number;
   closePercentage: number; // e.g. 40 (means 40%)
+  label?: string; // e.g. "Gatillo de BE", "Trailing", "Target Max"
 }
 
 export interface StrategyWithOrders extends Strategy {
@@ -30,7 +53,11 @@ export interface StrategyWithOrders extends Strategy {
   priceDirection?: 'up' | 'down' | 'neutral';
   distancePercent?: number;
   isAlertZone?: boolean;
+  effectiveThreshold?: number;
   riskRewardRatio?: number;
+  timeframeCandles?: Record<string, TimeframeCandle>;
+  atr14?: number;
+  atrPercent?: number;
 }
 
 export interface LiveTickerData {

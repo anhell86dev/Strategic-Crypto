@@ -18,13 +18,23 @@ import {
 interface StrategyRowProps {
   strategy: StrategyWithOrders;
   rankIndex: number;
+  onUpdateThreshold?: (strategyId: number, threshold: number) => void;
+  onOpenDcaSimulator?: (strategy: StrategyWithOrders) => void;
 }
 
-export const StrategyRow: React.FC<StrategyRowProps> = ({ strategy, rankIndex }) => {
+export const StrategyRow: React.FC<StrategyRowProps> = ({ 
+  strategy, 
+  rankIndex,
+  onUpdateThreshold,
+  onOpenDcaSimulator
+}) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [flashClass, setFlashClass] = useState<string>('');
+  const [isEditingThreshold, setIsEditingThreshold] = useState(false);
   const prevPriceRef = useRef<number | undefined>(strategy.currentPrice);
+
+  const effectiveThreshold = strategy.customAlertThreshold ?? 1.5;
 
   // Price Flash Effect
   useEffect(() => {
@@ -187,10 +197,29 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({ strategy, rankIndex })
 
           {/* 4. Distancia al Trigger (Radar Score) */}
           <div>
-            <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
-              Distancia Radar
-            </span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[10px] uppercase font-mono text-slate-400">
+                Distancia Radar
+              </span>
+              {/* Threshold Pill */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditingThreshold(!isEditingThreshold);
+                }}
+                title="Haga clic para cambiar el umbral de alerta personalizado"
+                className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-semibold transition-colors flex items-center gap-0.5 ${
+                  strategy.customAlertThreshold !== undefined
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-700/80'
+                    : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span>&lt; {effectiveThreshold.toFixed(1)}%</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 relative">
               <span className={`font-mono font-bold text-sm tabular-nums px-2 py-0.5 rounded ${
                 isAlert
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shadow-xs'
@@ -200,7 +229,45 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({ strategy, rankIndex })
               }`}>
                 {distance.toFixed(2)}%
               </span>
+
+              {/* Quick Threshold Popover */}
+              {isEditingThreshold && onUpdateThreshold && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute right-0 top-7 z-50 bg-slate-900 border border-cyan-500/40 rounded-lg p-2 shadow-2xl backdrop-blur-md text-[10px] font-mono w-44"
+                >
+                  <div className="text-slate-300 font-bold mb-1.5 flex items-center justify-between">
+                    <span>Umbral de Alerta</span>
+                    <button
+                      onClick={() => setIsEditingThreshold(false)}
+                      className="text-slate-500 hover:text-white"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[0.5, 1.0, 1.5, 2.0, 3.0, 5.0].map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => {
+                          onUpdateThreshold(strategy.id, val);
+                          setIsEditingThreshold(false);
+                        }}
+                        className={`py-1 rounded text-center font-bold ${
+                          effectiveThreshold === val
+                            ? 'bg-cyan-400 text-slate-950'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        {val}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
+
             <div className="w-full bg-slate-800/80 h-1 rounded-full mt-1.5 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
@@ -245,9 +312,9 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({ strategy, rankIndex })
               e.stopPropagation();
               setIsExpanded(!isExpanded);
             }}
-            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-300 bg-slate-800/60 hover:bg-slate-800 rounded-md transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-cyan-300 bg-slate-800/90 hover:bg-slate-800 border border-slate-700/70 rounded-lg transition-colors shadow-xs"
           >
-            <span>{isExpanded ? 'Ocultar' : 'Ver TPs'}</span>
+            <span>{isExpanded ? 'Ocultar Matriz' : 'Matriz & Escala'}</span>
             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         </div>
@@ -255,7 +322,13 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({ strategy, rankIndex })
       </div>
 
       {/* Accordion Content */}
-      {isExpanded && <TakeProfitAccordion strategy={strategy} />}
+      {isExpanded && (
+        <TakeProfitAccordion
+          strategy={strategy}
+          onUpdateThreshold={onUpdateThreshold}
+          onOpenDcaSimulator={onOpenDcaSimulator}
+        />
+      )}
     </div>
   );
 };

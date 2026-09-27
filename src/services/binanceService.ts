@@ -1,5 +1,6 @@
 import { LiveTickerData } from '../types';
 import { klineCache } from './klineService';
+import { multiTimeframeService } from './multiTimeframeService';
 
 type TickerCallback = (ticker: LiveTickerData) => void;
 type StatusCallback = (status: 'connected' | 'connecting' | 'error' | 'idle') => void;
@@ -146,6 +147,7 @@ class BinanceStreamManager {
     };
 
     klineCache.updateLatestTick(symbol, price);
+    multiTimeframeService.updateLivePrice(symbol, price);
 
     this.tickerCallbacks.forEach(cb => cb(ticker));
   }

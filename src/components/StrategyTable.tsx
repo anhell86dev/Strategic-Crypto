@@ -9,6 +9,8 @@ interface StrategyTableProps {
   onOpenAddStrategy: () => void;
   onClearFilters: () => void;
   isFiltered: boolean;
+  onUpdateThreshold?: (strategyId: number, threshold: number) => void;
+  onOpenDcaSimulator?: (strategy: StrategyWithOrders) => void;
 }
 
 export const StrategyTable: React.FC<StrategyTableProps> = ({
@@ -16,7 +18,9 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
   totalUnfilteredCount,
   onOpenAddStrategy,
   onClearFilters,
-  isFiltered
+  isFiltered,
+  onUpdateThreshold,
+  onOpenDcaSimulator
 }) => {
   if (strategies.length === 0) {
     return (
@@ -80,6 +84,8 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
             key={strategy.id || `${strategy.symbol}-${idx}`}
             strategy={strategy}
             rankIndex={idx}
+            onUpdateThreshold={onUpdateThreshold}
+            onOpenDcaSimulator={onOpenDcaSimulator}
           />
         ))}
       </div>

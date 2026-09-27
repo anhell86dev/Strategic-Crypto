@@ -197,6 +197,8 @@ export class SheetsService {
       if (rawStatus.toLowerCase().includes('pend')) status = 'Pending';
       else if (rawStatus.toLowerCase().includes('comp')) status = 'Completed';
 
+      const customAlertThreshold = row[9] ? parseFloat(row[9].replace(/%/g, '')) : undefined;
+
       if (symbol && !isNaN(entryPrice) && entryPrice > 0) {
         strategies.push({
           id: rawId,
@@ -208,7 +210,8 @@ export class SheetsService {
           date,
           status,
           category: row[7] || undefined,
-          notes: row[8] || undefined
+          notes: row[8] || undefined,
+          customAlertThreshold: (customAlertThreshold && !isNaN(customAlertThreshold) && customAlertThreshold > 0) ? customAlertThreshold : undefined
         });
       }
     });

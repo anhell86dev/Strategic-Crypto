@@ -18,6 +18,7 @@ import { StrategyTable } from './components/StrategyTable';
 import { TradeHistoryLog } from './components/TradeHistoryLog';
 import { SheetsConfigModal } from './components/SheetsConfigModal';
 import { AddStrategyModal } from './components/AddStrategyModal';
+import { DcaSimulatorModal } from './components/DcaSimulatorModal';
 import { INITIAL_STRATEGIES, INITIAL_ORDERS } from './data/initialStrategies';
 import { TradeLogService } from './services/tradeLogService';
 import { TradeLogEntry } from './types';
@@ -47,6 +48,8 @@ export default function App() {
   // Modal States
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [selectedStrategyForDca, setSelectedStrategyForDca] = useState<StrategyWithOrders | null>(null);
+  const [isDcaModalOpen, setIsDcaModalOpen] = useState<boolean>(false);
 
   // Trade History Log State
   const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>(() => TradeLogService.getLogs());
@@ -127,6 +130,7 @@ export default function App() {
     const enhanced: StrategyWithOrders[] = strategies.map(strat => {
       const ticker = tickers.get(strat.symbol.toUpperCase());
       const currentPrice = ticker?.price;
+      const effectiveThreshold = strat.customAlertThreshold !== undefined ? strat.customAlertThreshold : 1.5;
 
       let distancePercent = 999;
       let isAlertZone = false;
@@ -134,7 +138,7 @@ export default function App() {
       if (currentPrice && currentPrice > 0 && strat.entryPrice > 0) {
         const diferenciaAbsoluta = Math.abs(currentPrice - strat.entryPrice);
         distancePercent = (diferenciaAbsoluta / strat.entryPrice) * 100;
-        isAlertZone = distancePercent < 1.5;
+        isAlertZone = distancePercent <= effectiveThreshold;
 
         // Check audio alert if in alert zone
         if (isAlertZone) {
@@ -153,7 +157,8 @@ export default function App() {
         volume24h: ticker?.volume,
         priceDirection: ticker?.direction,
         distancePercent,
-        isAlertZone
+        isAlertZone,
+        effectiveThreshold
       };
     });
 
@@ -288,6 +293,18 @@ export default function App() {
     audioAlert.playRadarPing(1050, 0.4);
   };
 
+  // Custom alert threshold update per strategy
+  const handleUpdateThreshold = (strategyId: number, newThreshold: number) => {
+    const updated = strategies.map(s => {
+      if (s.id === strategyId) {
+        return { ...s, customAlertThreshold: newThreshold };
+      }
+      return s;
+    });
+    setStrategies(updated);
+    SheetsService.saveCustomData(updated, orders);
+  };
+
   // Clear filters
   const handleClearFilters = () => {
     setSearchQuery('');
@@ -346,6 +363,11 @@ export default function App() {
           onOpenAddStrategy={() => setIsAddModalOpen(true)}
           onClearFilters={handleClearFilters}
           isFiltered={isFiltered}
+          onUpdateThreshold={handleUpdateThreshold}
+          onOpenDcaSimulator={(strat) => {
+            setSelectedStrategyForDca(strat);
+            setIsDcaModalOpen(true);
+          }}
         />
 
         {/* Chronological Trade History Log (Filled Alerts Tracker) */}
@@ -372,6 +394,12 @@ export default function App() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAddStrategy={handleAddStrategy}
+      />
+
+      <DcaSimulatorModal
+        isOpen={isDcaModalOpen}
+        onClose={() => setIsDcaModalOpen(false)}
+        strategy={selectedStrategyForDca}
       />
 
       {/* Footer */}
