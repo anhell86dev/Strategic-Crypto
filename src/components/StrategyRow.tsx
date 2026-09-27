@@ -375,7 +375,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             }}
             className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-cyan-300 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-xl transition-all shadow-sm cursor-pointer"
           >
-            <span>{isExpanded ? 'Ocultar' : 'Matriz & Escala'}</span>
+            <span>{isExpanded ? 'Ocultar' : 'Escala & Matriz'}</span>
             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         </div>

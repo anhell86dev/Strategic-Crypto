@@ -29,7 +29,7 @@ export const TakeProfitAccordion: React.FC<TakeProfitAccordionProps> = ({
   onUpdateThreshold,
   onOpenDcaSimulator
 }) => {
-  const [activeTab, setActiveTab] = useState<'matrix' | 'horizontal_bar' | 'orders' | 'governance'>('matrix');
+  const [activeTab, setActiveTab] = useState<'horizontal_bar' | 'matrix' | 'orders' | 'governance'>('horizontal_bar');
 
   const {
     type,
@@ -163,19 +163,6 @@ export const TakeProfitAccordion: React.FC<TakeProfitAccordionProps> = ({
           
           <button
             type="button"
-            onClick={() => setActiveTab('matrix')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold transition-all cursor-pointer ${
-              activeTab === 'matrix'
-                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <GitBranch className="w-4 h-4" />
-            <span>1. Matriz Multicamino</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setActiveTab('horizontal_bar')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold transition-all cursor-pointer ${
               activeTab === 'horizontal_bar'
@@ -184,7 +171,20 @@ export const TakeProfitAccordion: React.FC<TakeProfitAccordionProps> = ({
             }`}
           >
             <Sliders className="w-4 h-4" />
-            <span>2. Barra Escala de Precios</span>
+            <span>1. Barra Escala de Precios</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('matrix')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold transition-all cursor-pointer ${
+              activeTab === 'matrix'
+                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <GitBranch className="w-4 h-4" />
+            <span>2. Matriz Multicamino</span>
           </button>
 
           <button
@@ -229,17 +229,17 @@ export const TakeProfitAccordion: React.FC<TakeProfitAccordionProps> = ({
         </div>
       </div>
 
-      {/* Tab 1: Matriz Multicamino del Trade */}
+      {/* Tab 1: Barra Horizontal de Precios en Diferentes Temporalidades */}
+      {activeTab === 'horizontal_bar' && (
+        <HorizontalPriceScaleBar strategy={strategy} />
+      )}
+
+      {/* Tab 2: Matriz Multicamino del Trade */}
       {activeTab === 'matrix' && (
         <MultiPathMatrix 
           strategy={strategy} 
           onOpenDcaSimulator={onOpenDcaSimulator}
         />
-      )}
-
-      {/* Tab 2: Barra Horizontal de Precios en Diferentes Temporalidades */}
-      {activeTab === 'horizontal_bar' && (
-        <HorizontalPriceScaleBar strategy={strategy} />
       )}
 
       {/* Tab 3: Detailed Orders & Risk Structure (Take Profits y Retornos en USD) */}
