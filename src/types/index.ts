@@ -54,3 +54,18 @@ export interface SheetsConfig {
   syncIntervalSeconds: number;
   usePresetFallback: boolean;
 }
+
+export interface TradeLogEntry {
+  id: string;
+  strategyId: number;
+  symbol: string;
+  coinName: string;
+  type: 'LONG' | 'SHORT';
+  plannedEntry: number;
+  executionPrice: number;
+  distanceAtFill: number;
+  timestamp: string; // ISO string
+  status: 'ENTRY_FILLED' | 'ZONE_TRIGGERED' | 'TP_HIT' | 'SL_HIT';
+  notes?: string;
+  takeProfitsCount?: number;
+}

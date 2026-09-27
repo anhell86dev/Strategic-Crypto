@@ -15,9 +15,12 @@ import { LegendBanner } from './components/LegendBanner';
 import { RadarStatsBar } from './components/RadarStatsBar';
 import { MarketHeatmap } from './components/MarketHeatmap';
 import { StrategyTable } from './components/StrategyTable';
+import { TradeHistoryLog } from './components/TradeHistoryLog';
 import { SheetsConfigModal } from './components/SheetsConfigModal';
 import { AddStrategyModal } from './components/AddStrategyModal';
 import { INITIAL_STRATEGIES, INITIAL_ORDERS } from './data/initialStrategies';
+import { TradeLogService } from './services/tradeLogService';
+import { TradeLogEntry } from './types';
 
 export default function App() {
   // Raw Data State
@@ -44,6 +47,9 @@ export default function App() {
   // Modal States
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+
+  // Trade History Log State
+  const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>(() => TradeLogService.getLogs());
 
   // Initial Sync from Google Sheets / Storage
   const loadStrategiesData = useCallback(async (cfg: SheetsConfig) => {
@@ -239,6 +245,49 @@ export default function App() {
     setIsSettingsOpen(false);
   };
 
+  // Track automatic alert fills when current price reaches entry trigger
+  useEffect(() => {
+    if (sortedAndFilteredStrategies.length > 0) {
+      TradeLogService.checkAndTrackFills(
+        sortedAndFilteredStrategies,
+        tradeLogs,
+        (newEntry) => {
+          setTradeLogs(prev => [newEntry, ...prev]);
+          audioAlert.playRadarPing(1050, 0.4); // distinctive fill chime
+        }
+      );
+    }
+  }, [sortedAndFilteredStrategies, tradeLogs]);
+
+  // Clear trade logs handler
+  const handleClearTradeLogs = () => {
+    TradeLogService.clearLogs();
+    setTradeLogs([]);
+  };
+
+  // Simulate fill handler for testing
+  const handleSimulateFill = (strategy: StrategyWithOrders) => {
+    const simPrice = strategy.currentPrice || strategy.entryPrice;
+    const newEntry: TradeLogEntry = {
+      id: `sim-${Date.now()}-${strategy.id}`,
+      strategyId: strategy.id,
+      symbol: strategy.symbol,
+      coinName: strategy.coinName || strategy.symbol.replace('USDT', ''),
+      type: strategy.type,
+      plannedEntry: strategy.entryPrice,
+      executionPrice: simPrice,
+      distanceAtFill: strategy.distancePercent || 0.05,
+      timestamp: new Date().toISOString(),
+      status: 'ENTRY_FILLED',
+      notes: `Ejecución simulada en tiempo real sobre ${strategy.symbol} a $${simPrice.toLocaleString()}.`,
+      takeProfitsCount: strategy.orders?.length || 0
+    };
+
+    const updated = TradeLogService.addEntry(newEntry);
+    setTradeLogs(updated);
+    audioAlert.playRadarPing(1050, 0.4);
+  };
+
   // Clear filters
   const handleClearFilters = () => {
     setSearchQuery('');
@@ -297,6 +346,14 @@ export default function App() {
           onOpenAddStrategy={() => setIsAddModalOpen(true)}
           onClearFilters={handleClearFilters}
           isFiltered={isFiltered}
+        />
+
+        {/* Chronological Trade History Log (Filled Alerts Tracker) */}
+        <TradeHistoryLog
+          logs={tradeLogs}
+          onClearLogs={handleClearTradeLogs}
+          onSimulateFill={handleSimulateFill}
+          availableStrategies={sortedAndFilteredStrategies}
         />
 
       </main>
