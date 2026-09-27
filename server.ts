@@ -14,6 +14,17 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 
 app.use(express.json());
 
+// Enable CORS for all incoming requests (crucial for custom headers like x-binance-api-key)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-binance-api-key, x-binance-api-secret, x-binance-testnet');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Helper to resolve credentials from env or request headers
 function getBinanceCredentials(req: Request) {
   const envKey = (process.env.BINANCE_API_KEY || '').trim();
@@ -38,7 +49,7 @@ function getBinanceCredentials(req: Request) {
   return { apiKey, apiSecret, source, isTestnet, baseUrl };
 }
 
-// Helper to make signed requests to Binance Futures API
+// Helper to make signed requests to Binance Futures API safely without throwing on non-JSON
 async function binanceSignedRequest(
   endpoint: string, 
   params: Record<string, string | number> = {}, 
@@ -47,7 +58,10 @@ async function binanceSignedRequest(
   const { apiKey, apiSecret, baseUrl } = credentials;
 
   if (!apiKey || !apiSecret) {
-    throw new Error('BINANCE_API_KEY y BINANCE_API_SECRET no están configuradas.');
+    const err: any = new Error('Credenciales de Binance no configuradas. Por favor añade BINANCE_API_KEY y BINANCE_API_SECRET.');
+    err.code = -2015;
+    err.status = 401;
+    throw err;
   }
 
   const timestamp = Date.now();
@@ -68,18 +82,43 @@ async function binanceSignedRequest(
 
   const requestUrl = `${baseUrl}${endpoint}?${queryString}&signature=${signature}`;
 
-  const response = await fetch(requestUrl, {
-    method: 'GET',
-    headers: {
-      'X-MBX-APIKEY': apiKey,
-      'Content-Type': 'application/json'
+  let response: any;
+  try {
+    response = await fetch(requestUrl, {
+      method: 'GET',
+      headers: {
+        'X-MBX-APIKEY': apiKey,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (netErr: any) {
+    const err: any = new Error(`Error de red al conectar con Binance: ${netErr.message}`);
+    err.status = 502;
+    throw err;
+  }
+
+  const text = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    if (response.status === 451) {
+      const err: any = new Error(
+        'Binance bloqueó la solicitud por restricción geográfica de IP (HTTP 451 Georestriction de Binance). Puedes activar el modo Testnet o usar el modo Simulación.'
+      );
+      err.code = 451;
+      err.status = 451;
+      throw err;
     }
-  });
+    const err: any = new Error(
+      `Binance devolvió una respuesta no válida (HTTP ${response.status}). Posible bloqueo o mantenimiento de Binance.`
+    );
+    err.status = response.status;
+    throw err;
+  }
 
-  const data = await response.json();
-
-  if (!response.ok || data.code !== undefined && data.code < 0) {
-    const errorMsg = data.msg || `Binance API error HTTP ${response.status}`;
+  if (!response.ok || (data.code !== undefined && data.code < 0)) {
+    const errorMsg = data.msg || `Binance API error (HTTP ${response.status})`;
     const err: any = new Error(errorMsg);
     err.code = data.code;
     err.status = response.status;
@@ -95,9 +134,14 @@ app.get('/api/binance/status', async (req: Request, res: Response) => {
   const start = Date.now();
 
   try {
-    // Ping Binance Futures public server time to test connectivity and latency
     const timeRes = await fetch(`${creds.baseUrl}/fapi/v1/time`);
-    const timeData: any = await timeRes.json();
+    const timeText = await timeRes.text();
+    let timeData: any = {};
+    try {
+      timeData = JSON.parse(timeText);
+    } catch {
+      // Ignored
+    }
     const latency = Date.now() - start;
 
     return res.json({
@@ -105,7 +149,7 @@ app.get('/api/binance/status', async (req: Request, res: Response) => {
       hasKey: Boolean(creds.apiKey),
       hasSecret: Boolean(creds.apiSecret),
       testnet: creds.isTestnet,
-      connected: true,
+      connected: timeRes.ok,
       source: creds.source,
       serverTime: timeData?.serverTime || Date.now(),
       latencyMs: latency
@@ -128,8 +172,9 @@ app.get('/api/binance/futures/account', async (req: Request, res: Response) => {
   const creds = getBinanceCredentials(req);
 
   if (!creds.apiKey || !creds.apiSecret) {
-    return res.status(401).json({
+    return res.status(200).json({
       ok: false,
+      configured: false,
       error: 'Credenciales de Binance no configuradas. Por favor añade BINANCE_API_KEY y BINANCE_API_SECRET.',
       code: -2015
     });
@@ -139,8 +184,8 @@ app.get('/api/binance/futures/account', async (req: Request, res: Response) => {
     const data = await binanceSignedRequest('/fapi/v2/account', {}, creds);
     return res.json({ ok: true, data });
   } catch (err: any) {
-    console.error('Error fetching Binance futures account:', err);
-    return res.status(err.status || 500).json({
+    console.warn('[Binance Account Error]:', err.message);
+    return res.status(200).json({
       ok: false,
       error: err.message || 'Error al obtener la cuenta de futuros de Binance',
       code: err.code
@@ -153,10 +198,12 @@ app.get('/api/binance/futures/positions', async (req: Request, res: Response) =>
   const creds = getBinanceCredentials(req);
 
   if (!creds.apiKey || !creds.apiSecret) {
-    return res.status(401).json({
+    return res.status(200).json({
       ok: false,
+      configured: false,
       error: 'Credenciales de Binance no configuradas.',
-      code: -2015
+      code: -2015,
+      positions: []
     });
   }
 
@@ -202,11 +249,12 @@ app.get('/api/binance/futures/positions', async (req: Request, res: Response) =>
       positions
     });
   } catch (err: any) {
-    console.error('Error fetching Binance futures positions:', err);
-    return res.status(err.status || 500).json({
+    console.warn('[Binance Positions Error]:', err.message);
+    return res.status(200).json({
       ok: false,
       error: err.message || 'Error al obtener posiciones de futuros',
-      code: err.code
+      code: err.code,
+      positions: []
     });
   }
 });
@@ -216,10 +264,12 @@ app.get('/api/binance/futures/orders', async (req: Request, res: Response) => {
   const creds = getBinanceCredentials(req);
 
   if (!creds.apiKey || !creds.apiSecret) {
-    return res.status(401).json({
+    return res.status(200).json({
       ok: false,
+      configured: false,
       error: 'Credenciales de Binance no configuradas.',
-      code: -2015
+      code: -2015,
+      orders: []
     });
   }
 
@@ -230,11 +280,12 @@ app.get('/api/binance/futures/orders', async (req: Request, res: Response) => {
       orders: Array.isArray(rawOrders) ? rawOrders : []
     });
   } catch (err: any) {
-    console.error('Error fetching Binance futures open orders:', err);
-    return res.status(err.status || 500).json({
+    console.warn('[Binance Orders Error]:', err.message);
+    return res.status(200).json({
       ok: false,
       error: err.message || 'Error al obtener órdenes abiertas',
-      code: err.code
+      code: err.code,
+      orders: []
     });
   }
 });

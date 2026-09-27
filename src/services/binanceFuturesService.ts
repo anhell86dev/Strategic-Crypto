@@ -9,7 +9,8 @@ import { proxyService } from './proxyService';
 export class BinanceFuturesService {
   private static getAuthHeaders(): HeadersInit {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
     };
 
     // If proxyService has retrieved BINANCE_API and BINANCE_API_SECRET from Google Apps Script, pass them
@@ -27,168 +28,199 @@ export class BinanceFuturesService {
   }
 
   /**
-   * Check connection status with backend and Binance Futures
+   * Helper to perform safe fetch that NEVER throws JSON parse errors on HTML responses
    */
-  public static async checkStatus(): Promise<BinanceFuturesConnectionStatus> {
+  private static async safeFetchJson(url: string, options: RequestInit = {}): Promise<{ 
+    ok: boolean; 
+    status: number; 
+    data?: any; 
+    error?: string;
+  }> {
     try {
-      const res = await fetch('/api/binance/status', {
-        headers: this.getAuthHeaders()
-      });
-      if (res.ok) {
-        return await res.json();
+      const res = await fetch(url, options);
+      const text = await res.text();
+      
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        // Non-JSON response (e.g. <!DOCTYPE html>...)
+        return {
+          ok: false,
+          status: res.status,
+          error: `El servidor devolvió una respuesta no válida (HTTP ${res.status}).`
+        };
       }
+
+      if (!res.ok || (parsed && parsed.ok === false)) {
+        return {
+          ok: false,
+          status: res.status,
+          error: parsed?.error || parsed?.msg || `Error HTTP ${res.status} de Binance`
+        };
+      }
+
       return {
-        configured: false,
-        hasKey: false,
-        hasSecret: false,
-        testnet: false,
-        connected: false,
-        source: 'none',
-        error: `HTTP ${res.status}`
+        ok: true,
+        status: res.status,
+        data: parsed.data !== undefined ? parsed.data : parsed
       };
     } catch (e: any) {
       return {
-        configured: false,
-        hasKey: false,
-        hasSecret: false,
-        testnet: false,
-        connected: false,
-        source: 'none',
-        error: e.message || 'No se pudo conectar con el servidor backend'
+        ok: false,
+        status: 0,
+        error: e.message || 'Error de conexión con el backend'
       };
     }
+  }
+
+  /**
+   * Check connection status with backend and Binance Futures
+   */
+  public static async checkStatus(): Promise<BinanceFuturesConnectionStatus> {
+    const result = await this.safeFetchJson('/api/binance/status', {
+      headers: this.getAuthHeaders()
+    });
+
+    if (result.ok && result.data) {
+      return {
+        configured: Boolean(result.data.configured),
+        hasKey: Boolean(result.data.hasKey),
+        hasSecret: Boolean(result.data.hasSecret),
+        testnet: Boolean(result.data.testnet),
+        connected: Boolean(result.data.connected),
+        source: result.data.source || 'none',
+        serverTime: result.data.serverTime,
+        latencyMs: result.data.latencyMs,
+        error: result.data.error
+      };
+    }
+
+    return {
+      configured: false,
+      hasKey: false,
+      hasSecret: false,
+      testnet: false,
+      connected: false,
+      source: 'none',
+      error: result.error || 'No se pudo conectar con el servidor backend'
+    };
   }
 
   /**
    * Fetch Binance Futures Account Information
    */
   public static async getAccount(): Promise<{ ok: boolean; data?: BinanceFuturesAccount; error?: string }> {
-    try {
-      const res = await fetch('/api/binance/futures/account', {
-        headers: this.getAuthHeaders()
-      });
-      const json = await res.json();
+    const result = await this.safeFetchJson('/api/binance/futures/account', {
+      headers: this.getAuthHeaders()
+    });
 
-      if (!res.ok || !json.ok) {
-        return {
-          ok: false,
-          error: json.error || `HTTP ${res.status}: Error al obtener cuenta de Binance Futuros`
-        };
-      }
-
-      const raw = json.data;
-      const account: BinanceFuturesAccount = {
-        totalWalletBalance: parseFloat(raw.totalWalletBalance || '0'),
-        totalUnrealizedProfit: parseFloat(raw.totalUnrealizedProfit || '0'),
-        totalMarginBalance: parseFloat(raw.totalMarginBalance || '0'),
-        availableBalance: parseFloat(raw.availableBalance || '0'),
-        totalInitialMargin: parseFloat(raw.totalInitialMargin || '0'),
-        totalMaintMargin: parseFloat(raw.totalMaintMargin || '0'),
-        marginRatio: parseFloat(raw.totalMarginBalance || '0') > 0
-          ? (parseFloat(raw.totalMaintMargin || '0') / parseFloat(raw.totalMarginBalance || '1')) * 100
-          : 0,
-        assets: (raw.assets || [])
-          .filter((a: any) => parseFloat(a.walletBalance || '0') > 0 || a.asset === 'USDT' || a.asset === 'USDC')
-          .map((a: any) => ({
-            asset: a.asset,
-            walletBalance: parseFloat(a.walletBalance || '0'),
-            unrealizedProfit: parseFloat(a.unrealizedProfit || '0'),
-            marginBalance: parseFloat(a.marginBalance || '0'),
-            availableBalance: parseFloat(a.availableBalance || '0'),
-            crossWalletBalance: parseFloat(a.crossWalletBalance || '0')
-          })),
-        positions: (raw.positions || [])
-          .filter((p: any) => parseFloat(p.positionAmt || '0') !== 0)
-          .map((p: any) => {
-            const amt = parseFloat(p.positionAmt);
-            const mark = parseFloat(p.entryPrice) || 1;
-            const lev = parseFloat(p.leverage) || 1;
-            const notional = Math.abs(amt * mark);
-            const pnl = parseFloat(p.unrealizedProfit || '0');
-            const initialMargin = lev > 0 ? notional / lev : 0;
-            return {
-              symbol: p.symbol,
-              positionAmt: amt,
-              entryPrice: parseFloat(p.entryPrice || '0'),
-              markPrice: mark,
-              unRealizedProfit: pnl,
-              liquidationPrice: 0,
-              leverage: lev,
-              marginType: (p.isolated ? 'isolated' : 'cross') as any,
-              isolatedMargin: parseFloat(p.isolatedMargin || '0'),
-              positionSide: p.positionSide || 'BOTH',
-              notional,
-              roe: initialMargin > 0 ? (pnl / initialMargin) * 100 : 0,
-              side: amt > 0 ? 'LONG' : 'SHORT'
-            };
-          }),
-        openPositionsCount: (raw.positions || []).filter((p: any) => parseFloat(p.positionAmt || '0') !== 0).length,
-        canTrade: Boolean(raw.canTrade),
-        canDeposit: Boolean(raw.canDeposit),
-        canWithdraw: Boolean(raw.canWithdraw),
-        feeTier: raw.feeTier || 0,
-        updateTime: raw.updateTime || Date.now()
-      };
-
-      return { ok: true, data: account };
-    } catch (e: any) {
+    if (!result.ok || !result.data) {
       return {
         ok: false,
-        error: e.message || 'Error de conexión con el backend de Binance'
+        error: result.error || 'Error al obtener cuenta de Binance Futuros'
       };
     }
+
+    const raw = result.data;
+    const account: BinanceFuturesAccount = {
+      totalWalletBalance: parseFloat(raw.totalWalletBalance || '0'),
+      totalUnrealizedProfit: parseFloat(raw.totalUnrealizedProfit || '0'),
+      totalMarginBalance: parseFloat(raw.totalMarginBalance || '0'),
+      availableBalance: parseFloat(raw.availableBalance || '0'),
+      totalInitialMargin: parseFloat(raw.totalInitialMargin || '0'),
+      totalMaintMargin: parseFloat(raw.totalMaintMargin || '0'),
+      marginRatio: parseFloat(raw.totalMarginBalance || '0') > 0
+        ? (parseFloat(raw.totalMaintMargin || '0') / parseFloat(raw.totalMarginBalance || '1')) * 100
+        : 0,
+      assets: (raw.assets || [])
+        .filter((a: any) => parseFloat(a.walletBalance || '0') > 0 || a.asset === 'USDT' || a.asset === 'USDC')
+        .map((a: any) => ({
+          asset: a.asset,
+          walletBalance: parseFloat(a.walletBalance || '0'),
+          unrealizedProfit: parseFloat(a.unrealizedProfit || '0'),
+          marginBalance: parseFloat(a.marginBalance || '0'),
+          availableBalance: parseFloat(a.availableBalance || '0'),
+          crossWalletBalance: parseFloat(a.crossWalletBalance || '0')
+        })),
+      positions: (raw.positions || [])
+        .filter((p: any) => parseFloat(p.positionAmt || '0') !== 0)
+        .map((p: any) => {
+          const amt = parseFloat(p.positionAmt);
+          const mark = parseFloat(p.entryPrice) || 1;
+          const lev = parseFloat(p.leverage) || 1;
+          const notional = Math.abs(amt * mark);
+          const pnl = parseFloat(p.unrealizedProfit || '0');
+          const initialMargin = lev > 0 ? notional / lev : 0;
+          return {
+            symbol: p.symbol,
+            positionAmt: amt,
+            entryPrice: parseFloat(p.entryPrice || '0'),
+            markPrice: mark,
+            unRealizedProfit: pnl,
+            liquidationPrice: 0,
+            leverage: lev,
+            marginType: (p.isolated ? 'isolated' : 'cross') as any,
+            isolatedMargin: parseFloat(p.isolatedMargin || '0'),
+            positionSide: p.positionSide || 'BOTH',
+            notional,
+            roe: initialMargin > 0 ? (pnl / initialMargin) * 100 : 0,
+            side: amt > 0 ? 'LONG' : 'SHORT'
+          };
+        }),
+      openPositionsCount: (raw.positions || []).filter((p: any) => parseFloat(p.positionAmt || '0') !== 0).length,
+      canTrade: Boolean(raw.canTrade),
+      canDeposit: Boolean(raw.canDeposit),
+      canWithdraw: Boolean(raw.canWithdraw),
+      feeTier: raw.feeTier || 0,
+      updateTime: raw.updateTime || Date.now()
+    };
+
+    return { ok: true, data: account };
   }
 
   /**
    * Fetch Binance Futures Open Positions Risk
    */
   public static async getPositions(): Promise<{ ok: boolean; positions?: BinanceFuturesPosition[]; error?: string }> {
-    try {
-      const res = await fetch('/api/binance/futures/positions', {
-        headers: this.getAuthHeaders()
-      });
-      const json = await res.json();
+    const result = await this.safeFetchJson('/api/binance/futures/positions', {
+      headers: this.getAuthHeaders()
+    });
 
-      if (!res.ok || !json.ok) {
-        return {
-          ok: false,
-          error: json.error || `HTTP ${res.status}: Error al obtener posiciones de Binance Futuros`
-        };
-      }
-
-      return { ok: true, positions: json.positions || [] };
-    } catch (e: any) {
+    if (!result.ok || !result.data) {
       return {
         ok: false,
-        error: e.message || 'Error de conexión con el backend de Binance'
+        error: result.error || 'Error al obtener posiciones de Binance Futuros'
       };
     }
+
+    const positions = Array.isArray(result.data.positions) 
+      ? result.data.positions 
+      : (Array.isArray(result.data) ? result.data : []);
+
+    return { ok: true, positions };
   }
 
   /**
    * Fetch Binance Futures Open Orders
    */
   public static async getOrders(): Promise<{ ok: boolean; orders?: BinanceFuturesOrder[]; error?: string }> {
-    try {
-      const res = await fetch('/api/binance/futures/orders', {
-        headers: this.getAuthHeaders()
-      });
-      const json = await res.json();
+    const result = await this.safeFetchJson('/api/binance/futures/orders', {
+      headers: this.getAuthHeaders()
+    });
 
-      if (!res.ok || !json.ok) {
-        return {
-          ok: false,
-          error: json.error || `HTTP ${res.status}: Error al obtener órdenes abiertas`
-        };
-      }
-
-      return { ok: true, orders: json.orders || [] };
-    } catch (e: any) {
+    if (!result.ok || !result.data) {
       return {
         ok: false,
-        error: e.message || 'Error de conexión con el backend de Binance'
+        error: result.error || 'Error al obtener órdenes abiertas'
       };
     }
+
+    const orders = Array.isArray(result.data.orders) 
+      ? result.data.orders 
+      : (Array.isArray(result.data) ? result.data : []);
+
+    return { ok: true, orders };
   }
 
   /**

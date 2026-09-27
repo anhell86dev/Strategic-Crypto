@@ -78,11 +78,14 @@ export const BinanceFuturesTab: React.FC<BinanceFuturesTabProps> = ({
         setOrders(ordRes.ok && ordRes.orders ? ordRes.orders : []);
         setUseDemoFallback(false);
       } else {
-        // If error or unconfigured, notify
-        const errMsg = accRes.error || posRes.error || 'No se pudo conectar a la API de Binance Futuros';
-        setErrorMsg(errMsg);
+        // Sanitize error message to avoid cryptic HTML/JSON parsing artifacts
+        let rawError = accRes.error || posRes.error || 'Credenciales de Binance no configuradas o sin conexión.';
+        if (rawError.includes('Unexpected token') || rawError.includes('<!DOCTYPE') || rawError.includes('HTML')) {
+          rawError = 'El servidor o la API de Binance devolvió una respuesta no válida o bloqueo por geolocalización de IP (HTTP 451).';
+        }
+        setErrorMsg(rawError);
         
-        // If demo fallback enabled, load sample
+        // If demo fallback enabled or account is empty, ensure clean state
         if (useDemoFallback) {
           const sample = BinanceFuturesService.getSampleData();
           setAccount(sample.account);
@@ -91,7 +94,11 @@ export const BinanceFuturesTab: React.FC<BinanceFuturesTabProps> = ({
       }
       setLastUpdated(new Date());
     } catch (err: any) {
-      setErrorMsg(err.message || 'Error inesperado al conectar con Binance');
+      let rawError = err.message || 'Error inesperado al conectar con Binance';
+      if (rawError.includes('Unexpected token') || rawError.includes('<!DOCTYPE') || rawError.includes('HTML')) {
+        rawError = 'El servidor o la API de Binance devolvió una respuesta no válida o bloqueo por geolocalización de IP (HTTP 451).';
+      }
+      setErrorMsg(rawError);
       if (useDemoFallback) {
         const sample = BinanceFuturesService.getSampleData();
         setAccount(sample.account);
