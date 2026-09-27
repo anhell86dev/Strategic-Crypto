@@ -13,6 +13,7 @@ import { audioAlert } from './services/audioService';
 import { Header } from './components/Header';
 import { LegendBanner } from './components/LegendBanner';
 import { RadarStatsBar } from './components/RadarStatsBar';
+import { MarketHeatmap } from './components/MarketHeatmap';
 import { StrategyTable } from './components/StrategyTable';
 import { SheetsConfigModal } from './components/SheetsConfigModal';
 import { AddStrategyModal } from './components/AddStrategyModal';
@@ -282,6 +283,12 @@ export default function App() {
 
         {/* Overview KPI Stats Bar */}
         <RadarStatsBar strategies={sortedAndFilteredStrategies} />
+
+        {/* D3 Market Heatmap (Proximity Intensity) */}
+        <MarketHeatmap
+          strategies={sortedAndFilteredStrategies}
+          onSelectCoin={(symbol) => setSearchQuery(symbol.replace('USDT', ''))}
+        />
 
         {/* Main Strategy Radar Table */}
         <StrategyTable
