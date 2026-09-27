@@ -27,6 +27,7 @@ import { TradeLogService } from './services/tradeLogService';
 import { proxyService } from './services/proxyService';
 import { TradeLogEntry } from './types';
 import { BinanceFuturesTab } from './components/BinanceFuturesTab';
+import { BinanceGatewayScreen } from './components/BinanceGatewayScreen';
 
 export default function App() {
   // Raw Data State (initialized immediately with 74+ strategies from stored custom data or presets)
@@ -62,6 +63,9 @@ export default function App() {
 
   // Primary Navigation Tab (Radar vs Binance)
   const [activeMainTab, setActiveMainTab] = useState<'radar' | 'binance'>('radar');
+
+  // Welcome Screen / Binance Gateway state (shows first before strategies)
+  const [showGateway, setShowGateway] = useState<boolean>(true);
 
   // Initial Sync from Google Sheets / Storage
   const loadStrategiesData = useCallback(async (cfg: SheetsConfig) => {
@@ -442,6 +446,21 @@ export default function App() {
 
   const isFiltered = searchQuery !== '' || activeFilters.length > 0;
 
+  if (showGateway) {
+    return (
+      <BinanceGatewayScreen 
+        onEnterApp={(options) => {
+          setShowGateway(false);
+          if (options?.startInBinance) {
+            setActiveMainTab('binance');
+          } else {
+            setActiveMainTab('radar');
+          }
+        }} 
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200 font-sans">
       
@@ -459,6 +478,7 @@ export default function App() {
         tickCount={tickCount}
         activeTab={activeMainTab}
         onTabChange={setActiveMainTab}
+        onOpenGateway={() => setShowGateway(true)}
       />
 
       {/* 2. Main Body Container */}

@@ -8,7 +8,8 @@ import {
   Plus, 
   Activity,
   CheckCircle2, 
-  AlertCircle 
+  AlertCircle,
+  Key
 } from 'lucide-react';
 import { DensityToggle } from './DensityToggle';
 import { ConnectionStatus } from '../types';
@@ -27,6 +28,7 @@ interface HeaderProps {
   tickCount: number;
   activeTab: 'radar' | 'binance';
   onTabChange: (tab: 'radar' | 'binance') => void;
+  onOpenGateway?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -42,6 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
   tickCount,
   activeTab,
   onTabChange,
+  onOpenGateway,
 }) => {
   const formatTime = (d: Date | null) => {
     if (!d) return '--:--:--';
@@ -187,6 +190,17 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Settings className="w-5 h-5" />
           </button>
+
+          {/* Binance Gateway / Connection Portal */}
+          {onOpenGateway && (
+            <button
+              onClick={onOpenGateway}
+              title="Portal de Conexión de Binance API"
+              className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+            >
+              <Key className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
 
