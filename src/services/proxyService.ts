@@ -102,12 +102,15 @@ class ProxyService {
         });
       }
 
-      // Extract properties standardizing exact names from image
+      // Handle nested property objects if returned as { properties: { ... } } or { data: { ... } }
+      const dataObj = parsed.properties || parsed.data || parsed.result || parsed;
+
+      // Extract properties standardizing exact names (BINANCE_API, BINANCE_API_SECRET, SHEETS_API_KEY, GEMINI_API_KEY)
       const extracted: ProxyProperties = {
-        BINANCE_API: parsed.BINANCE_API || parsed.binance_api || parsed.binanceApiKey || this.properties.BINANCE_API || '',
-        GEMINI_API_KEY: parsed.GEMINI_API_KEY || parsed.gemini_api_key || parsed.geminiKey || this.properties.GEMINI_API_KEY || '',
-        SHEETS_API_KEY: parsed.SHEETS_API_KEY || parsed.sheets_api_key || parsed.sheetsKey || parsed.apiKey || this.properties.SHEETS_API_KEY || '',
-        BINANCE_API_SECRET: parsed.BINANCE_API_SECRET || parsed.binance_api_secret || parsed.binanceSecret || this.properties.BINANCE_API_SECRET || ''
+        BINANCE_API: dataObj.BINANCE_API || dataObj.binance_api || dataObj.binanceApiKey || dataObj.apiKey || this.properties.BINANCE_API || '',
+        GEMINI_API_KEY: dataObj.GEMINI_API_KEY || dataObj.gemini_api_key || dataObj.geminiKey || this.properties.GEMINI_API_KEY || '',
+        SHEETS_API_KEY: dataObj.SHEETS_API_KEY || dataObj.sheets_api_key || dataObj.sheetsKey || dataObj.sheetApiKey || this.properties.SHEETS_API_KEY || '',
+        BINANCE_API_SECRET: dataObj.BINANCE_API_SECRET || dataObj.binance_api_secret || dataObj.binanceSecret || dataObj.apiSecret || this.properties.BINANCE_API_SECRET || ''
       };
 
       this.properties = extracted;
@@ -121,7 +124,24 @@ class ProxyService {
       this.notify();
       return { success: true, properties: extracted };
     } catch (err: any) {
-      console.warn('Proxy fetch attempt returned warning:', err);
+      console.warn('Proxy fetch attempt returned warning, attempting backend gapps proxy fallback:', err);
+      
+      // Fallback: try querying backend `/api/gapps/properties`
+      try {
+        const backendRes = await fetch('/api/gapps/properties');
+        if (backendRes.ok) {
+          const backendData = await backendRes.json();
+          if (backendData.ok && backendData.properties) {
+            return {
+              success: true,
+              properties: this.properties
+            };
+          }
+        }
+      } catch {
+        // Continue with error
+      }
+
       return {
         success: false,
         properties: this.properties,

@@ -12,6 +12,78 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+// Google Apps Script Proxy Service URL (stores BINANCE_API, BINANCE_API_SECRET, SHEETS_API_KEY, GEMINI_API_KEY)
+const GAPPS_PROXY_URL = 
+  process.env.GAPPS_PROXY_URL || 
+  'https://script.google.com/macros/s/AKfycbyh7HTOVbaUs8y0bfgzWXVuf8p5LGIFRRdfmbGO8-4hjFQiNwhpUyWj27BZNDAmzZWu/exec';
+
+let gappsCachedProperties: {
+  BINANCE_API?: string;
+  BINANCE_API_SECRET?: string;
+  SHEETS_API_KEY?: string;
+  GEMINI_API_KEY?: string;
+  lastFetched?: number;
+} = {};
+
+/**
+ * Fetches credentials from Google Apps Script Web App
+ */
+async function fetchGappsProperties(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && gappsCachedProperties.lastFetched && (now - gappsCachedProperties.lastFetched < 180000) && gappsCachedProperties.BINANCE_API) {
+    return gappsCachedProperties;
+  }
+
+  try {
+    const separator = GAPPS_PROXY_URL.includes('?') ? '&' : '?';
+    const targetUrl = `${GAPPS_PROXY_URL}${separator}action=getProperties&t=${now}`;
+
+    const res = await fetch(targetUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json, text/plain, */*'
+      }
+    });
+
+    if (res.ok) {
+      const text = await res.text();
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        text.split('\n').forEach(line => {
+          const [k, ...v] = line.split('=');
+          if (k && v.length) parsed[k.trim()] = v.join('=').trim();
+        });
+      }
+
+      // Handle nested structures
+      const props = parsed.properties || parsed.data || parsed;
+
+      const apiKey = props.BINANCE_API || props.binance_api || props.binanceApiKey || props.apiKey || gappsCachedProperties.BINANCE_API || '';
+      const apiSecret = props.BINANCE_API_SECRET || props.binance_api_secret || props.binanceSecret || props.apiSecret || gappsCachedProperties.BINANCE_API_SECRET || '';
+      const sheetsKey = props.SHEETS_API_KEY || props.sheets_api_key || props.sheetsKey || gappsCachedProperties.SHEETS_API_KEY || '';
+      const geminiKey = props.GEMINI_API_KEY || props.gemini_api_key || props.geminiKey || gappsCachedProperties.GEMINI_API_KEY || '';
+
+      gappsCachedProperties = {
+        BINANCE_API: apiKey,
+        BINANCE_API_SECRET: apiSecret,
+        SHEETS_API_KEY: sheetsKey,
+        GEMINI_API_KEY: geminiKey,
+        lastFetched: now
+      };
+
+      if (apiKey) {
+        console.log(`[GAPPS] Sincronizadas credenciales de Binance desde Google Apps Script. Key: ${apiKey.slice(0, 6)}... (longitud ${apiKey.length}), Secret: ${Boolean(apiSecret)}`);
+      }
+    }
+  } catch (err: any) {
+    console.warn('[GAPPS] Aviso al conectar con Google Apps Script:', err.message);
+  }
+
+  return gappsCachedProperties;
+}
+
 app.use(express.json());
 
 // Enable CORS for all incoming requests (crucial for custom headers like x-binance-api-key)
@@ -25,17 +97,27 @@ app.use((req, res, next) => {
   next();
 });
 
-// Helper to resolve credentials from env or request headers
-function getBinanceCredentials(req: Request) {
+// Helper to resolve credentials from Google Apps Script, Environment, or Request Headers
+async function getBinanceCredentials(req: Request) {
   const envKey = (process.env.BINANCE_API_KEY || '').trim();
   const envSecret = (process.env.BINANCE_API_SECRET || '').trim();
 
   const headerKey = ((req.headers['x-binance-api-key'] as string) || '').trim();
   const headerSecret = ((req.headers['x-binance-api-secret'] as string) || '').trim();
 
-  const apiKey = envKey || headerKey;
-  const apiSecret = envSecret || headerSecret;
-  const source = envKey ? 'environment' : (headerKey ? 'proxy' : 'none');
+  let apiKey = envKey || headerKey;
+  let apiSecret = envSecret || headerSecret;
+  let source = envKey ? 'environment' : (headerKey ? 'client_header' : 'none');
+
+  // Si no vienen en variables de entorno ni en headers, obtener del servicio de Google Apps Script (gapps)
+  if (!apiKey || !apiSecret) {
+    const gprops = await fetchGappsProperties();
+    if (gprops.BINANCE_API && gprops.BINANCE_API_SECRET) {
+      apiKey = gprops.BINANCE_API;
+      apiSecret = gprops.BINANCE_API_SECRET;
+      source = 'gapps_service';
+    }
+  }
 
   const isTestnet = 
     process.env.BINANCE_FUTURES_TESTNET === 'true' || 
@@ -53,7 +135,7 @@ function getBinanceCredentials(req: Request) {
 async function binanceSignedRequest(
   endpoint: string, 
   params: Record<string, string | number> = {}, 
-  credentials: ReturnType<typeof getBinanceCredentials>
+  credentials: { apiKey: string; apiSecret: string; baseUrl: string }
 ) {
   const { apiKey, apiSecret, baseUrl } = credentials;
 
@@ -128,9 +210,32 @@ async function binanceSignedRequest(
   return data;
 }
 
+// 0. GET /api/gapps/properties - Fetches current properties from Google Apps Script Web App
+app.get('/api/gapps/properties', async (_req: Request, res: Response) => {
+  try {
+    const props = await fetchGappsProperties(true);
+    return res.json({
+      ok: true,
+      configured: Boolean(props.BINANCE_API && props.BINANCE_API_SECRET),
+      hasBinanceKey: Boolean(props.BINANCE_API),
+      hasBinanceSecret: Boolean(props.BINANCE_API_SECRET),
+      hasSheetsKey: Boolean(props.SHEETS_API_KEY),
+      hasGeminiKey: Boolean(props.GEMINI_API_KEY),
+      properties: {
+        BINANCE_API: props.BINANCE_API ? `${props.BINANCE_API.slice(0, 6)}...` : '',
+        BINANCE_API_SECRET: props.BINANCE_API_SECRET ? '••••••••' : '',
+        SHEETS_API_KEY: props.SHEETS_API_KEY ? `${props.SHEETS_API_KEY.slice(0, 6)}...` : '',
+        GEMINI_API_KEY: props.GEMINI_API_KEY ? `${props.GEMINI_API_KEY.slice(0, 6)}...` : ''
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // 1. GET /api/binance/status
 app.get('/api/binance/status', async (req: Request, res: Response) => {
-  const creds = getBinanceCredentials(req);
+  const creds = await getBinanceCredentials(req);
   const start = Date.now();
 
   try {
@@ -169,7 +274,7 @@ app.get('/api/binance/status', async (req: Request, res: Response) => {
 
 // 2. GET /api/binance/futures/account
 app.get('/api/binance/futures/account', async (req: Request, res: Response) => {
-  const creds = getBinanceCredentials(req);
+  const creds = await getBinanceCredentials(req);
 
   if (!creds.apiKey || !creds.apiSecret) {
     return res.status(200).json({
@@ -195,7 +300,7 @@ app.get('/api/binance/futures/account', async (req: Request, res: Response) => {
 
 // 3. GET /api/binance/futures/positions
 app.get('/api/binance/futures/positions', async (req: Request, res: Response) => {
-  const creds = getBinanceCredentials(req);
+  const creds = await getBinanceCredentials(req);
 
   if (!creds.apiKey || !creds.apiSecret) {
     return res.status(200).json({
@@ -289,9 +394,9 @@ app.get('/api/binance/klines', async (req: Request, res: Response) => {
   return res.status(502).json({ ok: false, error: 'No se pudieron obtener klines de Binance', data: [] });
 });
 
-// 4. GET /api/binance/futures/orders
+// 5. GET /api/binance/futures/orders
 app.get('/api/binance/futures/orders', async (req: Request, res: Response) => {
-  const creds = getBinanceCredentials(req);
+  const creds = await getBinanceCredentials(req);
 
   if (!creds.apiKey || !creds.apiSecret) {
     return res.status(200).json({
