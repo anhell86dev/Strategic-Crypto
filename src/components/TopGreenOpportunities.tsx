@@ -13,8 +13,11 @@ import {
   ExternalLink,
   Zap,
   Activity,
-  Award
+  Award,
+  Clock,
+  ShieldAlert
 } from 'lucide-react';
+import { formatStrategyPublicationDate, getStrategyTimeDifference } from './StrategyRow';
 
 interface TopGreenOpportunitiesProps {
   topStrategies: StrategyWithOrders[];
@@ -43,38 +46,38 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
   const getRankBadge = (idx: number) => {
     if (idx === 0) {
       return {
-        label: '#1 TOP',
-        badgeClass: 'bg-amber-400 text-slate-950 font-black shadow-amber-500/30',
-        ringClass: 'ring-amber-400/40 border-amber-500/60',
+        label: '#1',
+        title: 'Top 1 Mejor Oportunidad',
+        badgeClass: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black shadow-lg shadow-amber-500/20 ring-1 ring-amber-300',
         icon: Trophy
       };
     }
     if (idx === 1) {
       return {
-        label: '#2 TOP',
-        badgeClass: 'bg-slate-200 text-slate-950 font-black shadow-slate-300/30',
-        ringClass: 'ring-slate-300/40 border-slate-400/60',
+        label: '#2',
+        title: 'Top 2 Mejor Oportunidad',
+        badgeClass: 'bg-gradient-to-r from-slate-200 to-slate-300 text-slate-950 font-black shadow-md shadow-slate-300/20 ring-1 ring-slate-100',
         icon: Award
       };
     }
     if (idx === 2) {
       return {
-        label: '#3 TOP',
-        badgeClass: 'bg-amber-600 text-white font-black shadow-amber-700/30',
-        ringClass: 'ring-amber-600/40 border-amber-600/60',
+        label: '#3',
+        title: 'Top 3 Mejor Oportunidad',
+        badgeClass: 'bg-gradient-to-r from-amber-600 to-amber-700 text-white font-black shadow-md shadow-amber-700/20 ring-1 ring-amber-500',
         icon: Flame
       };
     }
     return {
       label: `#${idx + 1}`,
-      badgeClass: 'bg-slate-800 text-slate-300 font-bold',
-      ringClass: 'ring-slate-700/40 border-slate-700/60',
+      title: `Top ${idx + 1}`,
+      badgeClass: 'bg-slate-800 text-slate-300 font-bold border border-slate-700',
       icon: Sparkles
     };
   };
 
   return (
-    <div className="bg-gradient-to-b from-emerald-950/40 via-slate-900/80 to-slate-950/90 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 shadow-2xl backdrop-blur-md mb-6 relative overflow-hidden">
+    <div className="bg-gradient-to-b from-emerald-950/40 via-slate-900/90 to-slate-950/95 border border-emerald-500/40 rounded-2xl p-4 sm:p-5 shadow-2xl backdrop-blur-md mb-6 relative overflow-hidden">
       
       {/* Decorative background glow */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
@@ -83,21 +86,21 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
       {/* Header Bar */}
       <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-emerald-500/20">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-slate-950 shadow-lg shadow-emerald-500/30">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-slate-950 shadow-lg shadow-emerald-500/30 shrink-0">
             <Trophy className="w-5 h-5 stroke-[2.5]" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-2">
+              <h3 className="text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-2 font-mono">
                 TOP 5 OPORTUNIDADES · SEMÁFORO VERDE 🟢
               </h3>
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/50 text-[10px] font-extrabold text-emerald-300 uppercase tracking-wider">
+              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/50 text-[10px] font-extrabold text-emerald-300 uppercase tracking-wider font-mono">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
                 VÁLIDAS EN ZONA & MEJOR R:B
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Estrategias verificadas desde su publicación: <strong>Sin tocar SL</strong>, <strong>sin TP previo</strong>, situadas en zona de entrada y con mayor retorno.
+              Tabla priorizada de estrategias verificadas desde su publicación: <strong>Sin tocar SL</strong>, <strong>sin TP prematuro</strong>, en zona de entrada y con mayor retorno proyectado.
             </p>
           </div>
         </div>
@@ -105,134 +108,175 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
         {onFilterGreen && (
           <button
             onClick={onFilterGreen}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md self-start md:self-auto ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md self-start md:self-auto font-mono ${
               isGreenFilterActive
-                ? 'bg-emerald-400 text-slate-950 shadow-emerald-500/20 ring-2 ring-emerald-300'
+                ? 'bg-emerald-400 text-slate-950 shadow-emerald-500/20 ring-2 ring-emerald-300 font-extrabold'
                 : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40'
             }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{isGreenFilterActive ? 'Filtro Verde Activo' : 'Ver Solo Semáforo Verde'}</span>
+            <span>{isGreenFilterActive ? 'Filtro Verde Activo' : 'Filtrar Todas las Verdes'}</span>
           </button>
         )}
       </div>
 
-      {/* Grid of Top 5 Cards */}
-      <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 pt-4">
-        {topStrategies.map((strat, idx) => {
-          const isLong = strat.type === 'LONG';
-          const currentPrice = strat.currentPrice || strat.entryPrice;
-          const distPct = strat.trafficLight?.distanceToEntryPct ?? strat.distancePercent ?? 0;
-          const rb = strat.trafficLight?.riskRewardRatio || 2.0;
-          const rankInfo = getRankBadge(idx);
-          const RankIcon = rankInfo.icon;
-          const tp1 = strat.orders?.[0]?.targetPrice;
+      {/* Table Container */}
+      <div className="relative z-10 pt-4 overflow-x-auto">
+        <table className="w-full text-left border-collapse font-mono">
+          
+          {/* Table Header */}
+          <thead>
+            <tr className="border-b border-emerald-500/20 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-950/60">
+              <th className="py-2.5 px-3 text-center w-14">Rank</th>
+              <th className="py-2.5 px-3 w-28">Semáforo</th>
+              <th className="py-2.5 px-3">Par / Dirección</th>
+              <th className="py-2.5 px-3 text-center">Ratio R:B</th>
+              <th className="py-2.5 px-3 text-center">Dist. Entrada</th>
+              <th className="py-2.5 px-3 text-right">Precio LIVE</th>
+              <th className="py-2.5 px-3 text-right">Entrada (E1)</th>
+              <th className="py-2.5 px-3 text-right">Stop Loss</th>
+              <th className="py-2.5 px-3 text-right">TP1 Target</th>
+              <th className="py-2.5 px-3 text-center">Acción</th>
+            </tr>
+          </thead>
 
-          return (
-            <div
-              key={strat.id}
-              onClick={() => onSelectStrategy && onSelectStrategy(strat)}
-              className={`group relative bg-slate-950/80 hover:bg-slate-900/90 border rounded-xl p-3.5 transition-all duration-300 cursor-pointer flex flex-col justify-between shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5 ${
-                idx === 0 
-                  ? 'border-amber-500/40 ring-1 ring-amber-500/20' 
-                  : 'border-slate-800 hover:border-emerald-500/40'
-              }`}
-            >
-              {/* Top Row: Rank Badge & Direction */}
-              <div>
-                <div className="flex items-center justify-between gap-1.5 mb-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] tracking-wider flex items-center gap-1 shadow-xs ${rankInfo.badgeClass}`}>
-                      <RankIcon className="w-2.5 h-2.5" />
-                      {rankInfo.label}
+          {/* Table Body */}
+          <tbody className="divide-y divide-slate-800/60 text-xs">
+            {topStrategies.map((strat, idx) => {
+              const isLong = strat.type === 'LONG';
+              const currentPrice = strat.currentPrice || strat.entryPrice;
+              const distPct = strat.trafficLight?.distanceToEntryPct ?? strat.distancePercent ?? 0;
+              const rb = strat.trafficLight?.riskRewardRatio || 2.0;
+              const rankInfo = getRankBadge(idx);
+              const RankIcon = rankInfo.icon;
+              const tp1 = strat.orders?.[0]?.targetPrice;
+              const symbolClean = strat.symbol.replace('USDT', '');
+              const displayStrategyName = strat.strategyName || strat.coinName || symbolClean;
+
+              return (
+                <tr
+                  key={strat.id}
+                  onClick={() => onSelectStrategy && onSelectStrategy(strat)}
+                  className={`group transition-colors duration-200 cursor-pointer ${
+                    idx === 0 
+                      ? 'bg-amber-950/15 hover:bg-emerald-950/40' 
+                      : 'hover:bg-slate-900/80 bg-slate-950/30'
+                  }`}
+                >
+                  {/* Rank Column */}
+                  <td className="py-3 px-3 text-center">
+                    <div className="flex items-center justify-center">
+                      <span 
+                        title={rankInfo.title}
+                        className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-xs font-black tracking-wider ${rankInfo.badgeClass}`}
+                      >
+                        <RankIcon className="w-3 h-3" />
+                        <span>{rankInfo.label}</span>
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* Semáforo Verde Badge */}
+                  <td className="py-3 px-3 whitespace-nowrap">
+                    <div 
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 shadow-sm"
+                      title={strat.trafficLight?.reason || 'Semáforo Verde: Sin SL, sin TP previo, en zona'}
+                    >
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                      </span>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                        {strat.trafficLight?.label || 'VERDE'}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* Par / Dirección */}
+                  <td className="py-3 px-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-white text-sm group-hover:text-emerald-300 transition-colors">
+                        {symbolClean}/USDT
+                      </span>
+                      <span className={`inline-flex items-center gap-0.5 text-[10px] font-black px-1.5 py-0.5 rounded uppercase ${
+                        isLong
+                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/80'
+                          : 'bg-rose-950 text-rose-300 border border-rose-700/80'
+                      }`}>
+                        {isLong ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                        {strat.type}
+                      </span>
+                      <span className="text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.2 rounded border border-slate-800">
+                        {strat.leverage}x
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate max-w-[200px] mt-0.5">
+                      {displayStrategyName}
+                    </div>
+                  </td>
+
+                  {/* Ratio R:B */}
+                  <td className="py-3 px-3 text-center whitespace-nowrap">
+                    <span 
+                      title={`Ratio Riesgo Beneficio: 1:${rb.toFixed(2)}`}
+                      className="inline-flex items-center gap-1 text-xs font-black px-2.5 py-1 rounded-lg bg-purple-950/80 text-purple-300 border border-purple-500/60 shadow-xs"
+                    >
+                      <Scale className="w-3 h-3 text-purple-400" />
+                      <span>1:{rb.toFixed(2)}</span>
                     </span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase ${
-                      isLong 
-                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' 
-                        : 'bg-rose-950 text-rose-400 border border-rose-500/30'
+                  </td>
+
+                  {/* Distancia a Entrada */}
+                  <td className="py-3 px-3 text-center whitespace-nowrap">
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-lg border ${
+                      distPct <= 0.2
+                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+                        : 'bg-cyan-950/80 text-cyan-300 border-cyan-500/50'
                     }`}>
-                      {strat.type}
+                      <Target className="w-3 h-3 text-cyan-400" />
+                      <span>{distPct <= 0.1 ? 'En Zona DCA' : `${distPct.toFixed(2)}%`}</span>
                     </span>
-                  </div>
+                  </td>
 
-                  {/* Semáforo Verde Indicator */}
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/40">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    VERDE
-                  </span>
-                </div>
+                  {/* Precio LIVE */}
+                  <td className="py-3 px-3 text-right whitespace-nowrap font-bold text-white text-xs">
+                    {formatPrice(currentPrice)}
+                  </td>
 
-                {/* Symbol & Coin Name */}
-                <div className="mb-2">
-                  <div className="flex items-baseline justify-between">
-                    <span className="font-extrabold text-white text-sm group-hover:text-emerald-300 transition-colors">
-                      {strat.symbol}
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-400">
-                      {strat.category || 'Spot / Fut'}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 truncate">
-                    {strat.coinName} · {strat.leverage}x
-                  </p>
-                </div>
+                  {/* Entrada E1 */}
+                  <td className="py-3 px-3 text-right whitespace-nowrap font-bold text-cyan-300 text-xs">
+                    {formatPrice(strat.entryPrice)}
+                  </td>
 
-                {/* Key Metrics: R:B & Distance */}
-                <div className="grid grid-cols-2 gap-1.5 bg-slate-900/90 rounded-lg p-2 border border-slate-800/80 mb-2.5">
-                  <div>
-                    <div className="text-[9px] font-mono text-slate-400 flex items-center gap-0.5">
-                      <Scale className="w-2.5 h-2.5 text-emerald-400" />
-                      R:B Ratio
-                    </div>
-                    <div className="text-xs font-mono font-black text-emerald-400">
-                      1:{rb.toFixed(2)}
-                    </div>
-                  </div>
+                  {/* Stop Loss */}
+                  <td className="py-3 px-3 text-right whitespace-nowrap font-bold text-amber-400 text-xs">
+                    {formatPrice(strat.stopLoss)}
+                  </td>
 
-                  <div>
-                    <div className="text-[9px] font-mono text-slate-400 flex items-center gap-0.5">
-                      <Target className="w-2.5 h-2.5 text-cyan-400" />
-                      Dist. Entrada
-                    </div>
-                    <div className="text-xs font-mono font-bold text-cyan-300">
-                      {distPct <= 0.1 ? 'En Zona DCA' : `${distPct.toFixed(2)}%`}
-                    </div>
-                  </div>
-                </div>
+                  {/* TP1 */}
+                  <td className="py-3 px-3 text-right whitespace-nowrap font-bold text-emerald-400 text-xs">
+                    {tp1 ? formatPrice(tp1) : '--'}
+                  </td>
 
-                {/* Price Breakdown */}
-                <div className="space-y-1 text-[10px] font-mono border-t border-slate-800/60 pt-2 mb-2">
-                  <div className="flex justify-between text-slate-400">
-                    <span>Entrada (E1):</span>
-                    <span className="font-bold text-cyan-300">{formatPrice(strat.entryPrice)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-400">
-                    <span>Precio LIVE:</span>
-                    <span className="font-bold text-white">{formatPrice(currentPrice)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-400">
-                    <span>Stop Loss:</span>
-                    <span className="text-amber-400">{formatPrice(strat.stopLoss)}</span>
-                  </div>
-                  {tp1 && (
-                    <div className="flex justify-between text-slate-400">
-                      <span>TP1:</span>
-                      <span className="text-emerald-400">{formatPrice(tp1)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Bottom Card Action */}
-              <div className="pt-1 text-center">
-                <span className="text-[10px] font-bold text-emerald-400 group-hover:text-emerald-300 flex items-center justify-center gap-1 transition-colors">
-                  <span>Inspeccionar Estrategia</span>
-                  <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                </span>
-              </div>
-            </div>
-          );
-        })}
+                  {/* Acción */}
+                  <td className="py-3 px-3 text-center whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectStrategy && onSelectStrategy(strat);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-300 hover:text-slate-950 bg-emerald-950/80 hover:bg-emerald-400 border border-emerald-500/50 transition-all cursor-pointer shadow-xs"
+                    >
+                      <span>Ver</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
     </div>
