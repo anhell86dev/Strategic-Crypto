@@ -3,6 +3,76 @@
 @layer base {
   :root {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    --density-spacing-multiplier: 1;
+    --density-card-padding: 1.25rem;
+    --density-row-padding-y: 1.125rem;
+  }
+
+  @media (min-width: 1024px) {
+    :root {
+      font-size: 17px;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    :root {
+      font-size: 18px;
+    }
+  }
+
+  /* Compact Theme Mode */
+  html[data-density="compact"], body[data-density="compact"] {
+    font-size: 14.5px;
+    --density-spacing-multiplier: 0.85;
+    --density-card-padding: 0.875rem;
+    --density-row-padding-y: 0.75rem;
+  }
+
+  @media (min-width: 1024px) {
+    html[data-density="compact"], body[data-density="compact"] {
+      font-size: 15px;
+    }
+  }
+
+  /* Standard Theme Mode */
+  html[data-density="standard"], body[data-density="standard"] {
+    font-size: 16px;
+    --density-spacing-multiplier: 1;
+    --density-card-padding: 1.25rem;
+    --density-row-padding-y: 1.125rem;
+  }
+
+  @media (min-width: 1024px) {
+    html[data-density="standard"], body[data-density="standard"] {
+      font-size: 17px;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    html[data-density="standard"], body[data-density="standard"] {
+      font-size: 18px;
+    }
+  }
+
+  /* Spacious Theme Mode (High Readability & Large Screens) */
+  html[data-density="spacious"], body[data-density="spacious"] {
+    font-size: 17.5px;
+    --density-spacing-multiplier: 1.2;
+    --density-card-padding: 1.75rem;
+    --density-row-padding-y: 1.5rem;
+  }
+
+  @media (min-width: 1024px) {
+    html[data-density="spacious"], body[data-density="spacious"] {
+      font-size: 18.5px;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    html[data-density="spacious"], body[data-density="spacious"] {
+      font-size: 20px;
+    }
   }
   
   code, kbd, samp, pre, .font-mono {
@@ -88,15 +158,15 @@
 
 /* Custom scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: #090d16;
 }
 ::-webkit-scrollbar-thumb {
   background: #1e293b;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;

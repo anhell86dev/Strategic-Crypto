@@ -10,6 +10,7 @@ import {
   CheckCircle2, 
   AlertCircle 
 } from 'lucide-react';
+import { DensityToggle } from './DensityToggle';
 import { ConnectionStatus } from '../types';
 
 interface HeaderProps {
@@ -129,6 +130,9 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Primary Actions & Tool Bar */}
         <div className="flex items-center flex-wrap gap-3 justify-end">
+          {/* Density Mode Switcher (Compact / Standard / Spacious) */}
+          <DensityToggle />
+
           {/* Audio Alert Toggle */}
           <button
             onClick={onToggleSound}
