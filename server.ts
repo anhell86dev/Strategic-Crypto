@@ -131,11 +131,39 @@ async function getBinanceCredentials(req: Request) {
   return { apiKey, apiSecret, source, isTestnet, baseUrl };
 }
 
-// Helper to make signed requests to Binance Futures API safely without throwing on non-JSON
+// Server time offset tracker for Binance
+let serverTimeOffset = 0;
+let lastTimeSync = 0;
+
+async function syncTimeWithBinance(baseUrl: string) {
+  const now = Date.now();
+  if (lastTimeSync > 0 && now - lastTimeSync < 300000) return serverTimeOffset;
+
+  try {
+    const start = Date.now();
+    const res = await fetch(`${baseUrl}/fapi/v1/time`);
+    if (res.ok) {
+      const data: any = await res.json();
+      const end = Date.now();
+      const rtt = Math.max(1, end - start);
+      const sTime = Number(data.serverTime);
+      if (sTime > 0) {
+        serverTimeOffset = Math.round((sTime + rtt / 2) - end);
+        lastTimeSync = end;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return serverTimeOffset;
+}
+
+// Helper to make canonical signed requests to Binance Futures API safely
 async function binanceSignedRequest(
   endpoint: string, 
-  params: Record<string, string | number> = {}, 
-  credentials: { apiKey: string; apiSecret: string; baseUrl: string }
+  params: Record<string, string | number | boolean> = {}, 
+  credentials: { apiKey: string; apiSecret: string; baseUrl: string },
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET'
 ) {
   const { apiKey, apiSecret, baseUrl } = credentials;
 
@@ -146,15 +174,19 @@ async function binanceSignedRequest(
     throw err;
   }
 
-  const timestamp = Date.now();
-  const allParams: Record<string, string | number> = {
+  await syncTimeWithBinance(baseUrl);
+  const adjustedTimestamp = Date.now() + serverTimeOffset;
+
+  const allParams: Record<string, string | number | boolean> = {
     ...params,
-    recvWindow: 6000,
-    timestamp
+    recvWindow: 7000,
+    timestamp: adjustedTimestamp
   };
 
-  const queryString = Object.entries(allParams)
-    .map(([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`)
+  // Canonical sort of keys
+  const sortedKeys = Object.keys(allParams).sort();
+  const queryString = sortedKeys
+    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(String(allParams[key]))}`)
     .join('&');
 
   const signature = crypto
@@ -162,21 +194,39 @@ async function binanceSignedRequest(
     .update(queryString)
     .digest('hex');
 
-  const requestUrl = `${baseUrl}${endpoint}?${queryString}&signature=${signature}`;
+  const requestUrl = method === 'GET' || method === 'DELETE'
+    ? `${baseUrl}${endpoint}?${queryString}&signature=${signature}`
+    : `${baseUrl}${endpoint}`;
+
+  const fetchOptions: RequestInit = {
+    method,
+    headers: {
+      'X-MBX-APIKEY': apiKey,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json'
+    }
+  };
+
+  if (method === 'POST' || method === 'PUT') {
+    fetchOptions.body = `${queryString}&signature=${signature}`;
+  }
 
   let response: any;
   try {
-    response = await fetch(requestUrl, {
-      method: 'GET',
-      headers: {
-        'X-MBX-APIKEY': apiKey,
-        'Content-Type': 'application/json'
-      }
-    });
+    response = await fetch(requestUrl, fetchOptions);
   } catch (netErr: any) {
     const err: any = new Error(`Error de red al conectar con Binance: ${netErr.message}`);
     err.status = 502;
     throw err;
+  }
+
+  // Track weight header
+  const usedWeight = response.headers.get('x-mbx-used-weight-1m');
+  if (usedWeight) {
+    const weightNum = parseInt(usedWeight, 10);
+    if (weightNum > 2000) {
+      console.warn(`[Binance Rate Limit] Consumo de peso elevado: ${weightNum}/2400`);
+    }
   }
 
   const text = await response.text();
@@ -422,6 +472,155 @@ app.get('/api/binance/futures/orders', async (req: Request, res: Response) => {
       code: err.code,
       orders: []
     });
+  }
+});
+
+// 6. POST /api/binance/futures/listenKey - Create User Data Stream listenKey
+app.post('/api/binance/futures/listenKey', async (req: Request, res: Response) => {
+  const creds = await getBinanceCredentials(req);
+  if (!creds.apiKey) {
+    return res.status(401).json({ ok: false, error: 'Falta API Key' });
+  }
+
+  try {
+    const response = await fetch(`${creds.baseUrl}/fapi/v1/listenKey`, {
+      method: 'POST',
+      headers: {
+        'X-MBX-APIKEY': creds.apiKey,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data: any = await response.json();
+    if (response.ok && data.listenKey) {
+      return res.json({ ok: true, listenKey: data.listenKey });
+    }
+    return res.status(400).json({ ok: false, error: data.msg || 'No se pudo generar listenKey' });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 7. PUT /api/binance/futures/listenKey - Keep alive User Data Stream listenKey
+app.put('/api/binance/futures/listenKey', async (req: Request, res: Response) => {
+  const creds = await getBinanceCredentials(req);
+  const listenKey = req.body?.listenKey;
+  if (!creds.apiKey || !listenKey) {
+    return res.status(400).json({ ok: false, error: 'Falta API Key o listenKey' });
+  }
+
+  try {
+    const response = await fetch(`${creds.baseUrl}/fapi/v1/listenKey`, {
+      method: 'PUT',
+      headers: {
+        'X-MBX-APIKEY': creds.apiKey,
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.json({ ok: response.ok });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 8. POST /api/binance/futures/order - Place Order enforcing ISOLATED Margin & Max 5x Leverage Protection
+app.post('/api/binance/futures/order', async (req: Request, res: Response) => {
+  const creds = await getBinanceCredentials(req);
+  if (!creds.apiKey || !creds.apiSecret) {
+    return res.status(401).json({ ok: false, error: 'Credenciales de Binance no configuradas.' });
+  }
+
+  const {
+    symbol,
+    side, // 'BUY' | 'SELL'
+    type = 'LIMIT', // 'LIMIT' | 'MARKET' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET'
+    quantity,
+    price,
+    stopPrice,
+    reduceOnly = false,
+    timeInForce = 'GTC',
+    leverage = 5
+  } = req.body;
+
+  if (!symbol || !side || !quantity) {
+    return res.status(400).json({ ok: false, error: 'Faltan parámetros requeridos (symbol, side, quantity)' });
+  }
+
+  const cleanSymbol = symbol.toUpperCase().trim().replace('/', '');
+  const enforcedLeverage = Math.min(5, Math.max(1, parseInt(String(leverage), 10) || 5));
+
+  try {
+    // 1. Force Isolated Margin
+    try {
+      await binanceSignedRequest('/fapi/v1/marginType', {
+        symbol: cleanSymbol,
+        marginType: 'ISOLATED'
+      }, creds, 'POST');
+    } catch {
+      // Ignore if already isolated (-4046 No need to change margin type)
+    }
+
+    // 2. Force Max 5x Leverage
+    try {
+      await binanceSignedRequest('/fapi/v1/leverage', {
+        symbol: cleanSymbol,
+        leverage: enforcedLeverage
+      }, creds, 'POST');
+    } catch {
+      // Ignore
+    }
+
+    // 3. Dispatch Order
+    const orderParams: Record<string, string | number | boolean> = {
+      symbol: cleanSymbol,
+      side: side.toUpperCase(),
+      type: type.toUpperCase(),
+      quantity: String(quantity)
+    };
+
+    if (type === 'LIMIT') {
+      orderParams.price = String(price);
+      orderParams.timeInForce = timeInForce;
+    }
+
+    if (stopPrice) {
+      orderParams.stopPrice = String(stopPrice);
+    }
+
+    if (reduceOnly) {
+      orderParams.reduceOnly = 'true';
+    }
+
+    const orderResult = await binanceSignedRequest('/fapi/v1/order', orderParams, creds, 'POST');
+    return res.json({ ok: true, data: orderResult });
+  } catch (err: any) {
+    console.error('[Binance Order Creation Error]:', err.message);
+    return res.status(400).json({ ok: false, error: err.message, code: err.code });
+  }
+});
+
+// 9. DELETE /api/binance/futures/order - Cancel Order
+app.delete('/api/binance/futures/order', async (req: Request, res: Response) => {
+  const creds = await getBinanceCredentials(req);
+  if (!creds.apiKey || !creds.apiSecret) {
+    return res.status(401).json({ ok: false, error: 'Credenciales no configuradas' });
+  }
+
+  const symbol = (req.query.symbol as string || '').toUpperCase().trim().replace('/', '');
+  const orderId = req.query.orderId as string;
+
+  if (!symbol || !orderId) {
+    return res.status(400).json({ ok: false, error: 'Falta symbol u orderId' });
+  }
+
+  try {
+    const result = await binanceSignedRequest('/fapi/v1/order', {
+      symbol,
+      orderId
+    }, creds, 'DELETE');
+    return res.json({ ok: true, data: result });
+  } catch (err: any) {
+    return res.status(400).json({ ok: false, error: err.message, code: err.code });
   }
 });
 

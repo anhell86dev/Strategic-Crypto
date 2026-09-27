@@ -320,4 +320,52 @@ export class BinanceFuturesService {
 
     return { account, positions };
   }
+
+  /**
+   * Place an order with mandatory ISOLATED margin and max 5x leverage risk enforcement
+   */
+  public static async placeOrder(params: {
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    type?: 'LIMIT' | 'MARKET' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET';
+    quantity: number | string;
+    price?: number | string;
+    stopPrice?: number | string;
+    reduceOnly?: boolean;
+    leverage?: number;
+  }): Promise<{ ok: boolean; data?: any; error?: string }> {
+    const headers = this.getAuthHeaders();
+    const result = await this.safeFetchJson('/api/binance/futures/order', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ...params,
+        leverage: Math.min(5, Math.max(1, params.leverage || 5))
+      })
+    });
+
+    if (!result.ok) {
+      return { ok: false, error: result.error || 'Error enviando orden a Binance Futuros' };
+    }
+
+    return { ok: true, data: result.data };
+  }
+
+  /**
+   * Cancel an open order on Binance Futures
+   */
+  public static async cancelOrder(symbol: string, orderId: string | number): Promise<{ ok: boolean; data?: any; error?: string }> {
+    const headers = this.getAuthHeaders();
+    const result = await this.safeFetchJson(`/api/binance/futures/order?symbol=${encodeURIComponent(symbol)}&orderId=${encodeURIComponent(orderId)}`, {
+      method: 'DELETE',
+      headers
+    });
+
+    if (!result.ok) {
+      return { ok: false, error: result.error || 'Error cancelando orden en Binance' };
+    }
+
+    return { ok: true, data: result.data };
+  }
 }
+

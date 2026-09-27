@@ -2,23 +2,42 @@ import { LiveTickerData } from '../types';
 import { klineCache } from './klineService';
 import { multiTimeframeService } from './multiTimeframeService';
 import { proxyService } from './proxyService';
+import { binanceWsManager } from './binanceWs';
 
 type TickerCallback = (ticker: LiveTickerData) => void;
 type StatusCallback = (status: 'connected' | 'connecting' | 'error' | 'idle') => void;
 
 class BinanceStreamManager {
-  private ws: WebSocket | null = null;
   private symbols: Set<string> = new Set();
   private tickerCallbacks: Set<TickerCallback> = new Set();
   private statusCallbacks: Set<StatusCallback> = new Set();
   private status: 'connected' | 'connecting' | 'error' | 'idle' = 'idle';
-  private reconnectTimer: any = null;
   private restPollTimer: any = null;
   private lastPrices: Map<string, number> = new Map();
   private isDestroyed = false;
 
+  constructor() {
+    // Connect to binanceWsManager market stream events
+    binanceWsManager.subscribeMarket((t) => {
+      this.handleTickerPayload({
+        s: t.symbol,
+        c: t.price,
+        p: t.priceChange24h,
+        P: t.priceChangePercent24h,
+        h: t.high24h,
+        l: t.low24h,
+        v: t.volume24h
+      });
+    });
+
+    binanceWsManager.subscribeStatus((st) => {
+      const mappedStatus = (st === 'connected' || st === 'connecting' || st === 'error') ? st : 'idle';
+      this.setStatus(mappedStatus);
+    });
+  }
+
   public setSymbols(symbolsList: string[]) {
-    const formatted = symbolsList.map(s => s.toUpperCase().trim()).filter(Boolean);
+    const formatted = symbolsList.map(s => s.toUpperCase().trim().replace('/', '')).filter(Boolean);
     const newSet = new Set(formatted);
     
     // Check if symbol set changed
@@ -36,7 +55,8 @@ class BinanceStreamManager {
 
     if (changed) {
       this.symbols = newSet;
-      this.reconnect();
+      binanceWsManager.setSymbols(Array.from(newSet));
+      this.connect();
       // Fetch initial snapshot via REST
       this.fetchRestSnapshot();
     }
@@ -60,65 +80,7 @@ class BinanceStreamManager {
 
   public connect() {
     if (this.isDestroyed || this.symbols.size === 0) return;
-
-    if (this.ws) {
-      try {
-        this.ws.close();
-      } catch (e) {
-        console.error('Error closing existing ws:', e);
-      }
-      this.ws = null;
-    }
-
-    this.setStatus('connecting');
-
-    // Create stream query: btcusdt@ticker/ethusdt@ticker/...
-    const streamNames = Array.from(this.symbols)
-      .map(s => `${s.toLowerCase()}@ticker`)
-      .join('/');
-
-    const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streamNames}`;
-
-    try {
-      this.ws = new WebSocket(wsUrl);
-
-      this.ws.onopen = () => {
-        this.setStatus('connected');
-        if (this.reconnectTimer) {
-          clearTimeout(this.reconnectTimer);
-          this.reconnectTimer = null;
-        }
-      };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message && message.data) {
-            this.handleTickerPayload(message.data);
-          }
-        } catch (err) {
-          console.warn('Error parsing Binance ws message:', err);
-        }
-      };
-
-      this.ws.onerror = (err) => {
-        console.warn('Binance WebSocket error, falling back to REST poll:', err);
-        this.setStatus('error');
-      };
-
-      this.ws.onclose = () => {
-        if (!this.isDestroyed) {
-          this.setStatus('connecting');
-          this.scheduleReconnect();
-        }
-      };
-    } catch (err) {
-      console.warn('WebSocket init exception, starting REST poll fallback:', err);
-      this.setStatus('error');
-      this.scheduleReconnect();
-    }
-
-    // Start background REST poll as safety net
+    binanceWsManager.connectMarketStream();
     this.startRestPolling();
   }
 
@@ -162,8 +124,8 @@ class BinanceStreamManager {
         headers['X-MBX-APIKEY'] = apiKey;
       }
 
-      // Binance 24hr ticker endpoint
-      const response = await fetch('https://api.binance.com/api/v3/ticker/24hr', { headers });
+      // Binance USDⓈ-M Futures 24hr ticker endpoint
+      const response = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr', { headers });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       if (Array.isArray(data)) {
@@ -183,48 +145,28 @@ class BinanceStreamManager {
         });
       }
     } catch (e) {
-      console.warn('REST snapshot fallback error:', e);
+      console.warn('REST USD-M Futures snapshot fallback warning:', e);
     }
   }
 
   private startRestPolling() {
     if (this.restPollTimer) return;
     this.restPollTimer = setInterval(() => {
-      // If WebSocket is not connected, use REST polling every 3 seconds
+      // If WebSocket is not connected, use REST polling every 4 seconds as safety net
       if (this.status !== 'connected') {
         this.fetchRestSnapshot();
       }
-    }, 3000);
-  }
-
-  private scheduleReconnect() {
-    if (this.reconnectTimer) return;
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect();
     }, 4000);
   }
 
   public reconnect() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    this.connect();
+    binanceWsManager.reconnect();
   }
 
   public destroy() {
     this.isDestroyed = true;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.restPollTimer) clearInterval(this.restPollTimer);
-    if (this.ws) {
-      try {
-        this.ws.close();
-      } catch (e) {
-        // ignore
-      }
-      this.ws = null;
-    }
+    binanceWsManager.destroy();
     this.tickerCallbacks.clear();
     this.statusCallbacks.clear();
   }
