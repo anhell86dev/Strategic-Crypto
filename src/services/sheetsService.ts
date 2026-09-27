@@ -1,5 +1,6 @@
 import { Strategy, TakeProfitOrder, SheetsConfig } from '../types';
 import { INITIAL_STRATEGIES, INITIAL_ORDERS } from '../data/initialStrategies';
+import { proxyService, DEFAULT_PROXY_SERVER_URL } from './proxyService';
 
 const STORAGE_KEY_CONFIG = 'crypto_radar_sheets_config';
 const STORAGE_KEY_CUSTOM_STRATEGIES = 'crypto_radar_custom_strategies';
@@ -11,6 +12,7 @@ export const DEFAULT_SHEETS_CONFIG: SheetsConfig = {
   autoSync: true,
   syncIntervalSeconds: 60,
   usePresetFallback: true,
+  proxyUrl: DEFAULT_PROXY_SERVER_URL,
 };
 
 export class SheetsService {
@@ -29,6 +31,9 @@ export class SheetsService {
   public static saveConfig(config: SheetsConfig): void {
     try {
       localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(config));
+      if (config.proxyUrl) {
+        proxyService.setProxyUrl(config.proxyUrl);
+      }
     } catch (e) {
       console.warn('Could not save sheets config:', e);
     }
@@ -68,15 +73,19 @@ export class SheetsService {
     source: 'google_sheets_api' | 'google_sheets_csv' | 'local_preset';
     timestamp: Date;
   }> {
-    const { spreadsheetId, apiKey } = config;
+    const { spreadsheetId } = config;
+    const effectiveApiKey = (config.apiKey && config.apiKey.trim() !== '') 
+      ? config.apiKey.trim() 
+      : proxyService.getSheetsApiKey();
+
     const timestamp = new Date();
 
-    // 1. Try Google Sheets v4 REST API if API Key is present
-    if (spreadsheetId && apiKey && apiKey.trim() !== '') {
+    // 1. Try Google Sheets v4 REST API if API Key is present (direct or via Proxy Properties)
+    if (spreadsheetId && effectiveApiKey) {
       try {
         const cacheBuster = Date.now();
-        const stratUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Estrategia?key=${apiKey}&t=${cacheBuster}`;
-        const ordUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Ordenes?key=${apiKey}&t=${cacheBuster}`;
+        const stratUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Estrategia?key=${effectiveApiKey}&t=${cacheBuster}`;
+        const ordUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Ordenes?key=${effectiveApiKey}&t=${cacheBuster}`;
 
         const [stratRes, ordRes] = await Promise.all([
           fetch(stratUrl),

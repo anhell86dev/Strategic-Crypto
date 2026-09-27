@@ -1,6 +1,7 @@
 import { LiveTickerData } from '../types';
 import { klineCache } from './klineService';
 import { multiTimeframeService } from './multiTimeframeService';
+import { proxyService } from './proxyService';
 
 type TickerCallback = (ticker: LiveTickerData) => void;
 type StatusCallback = (status: 'connected' | 'connecting' | 'error' | 'idle') => void;
@@ -155,8 +156,14 @@ class BinanceStreamManager {
   public async fetchRestSnapshot() {
     if (this.symbols.size === 0) return;
     try {
+      const apiKey = proxyService.getBinanceApiKey();
+      const headers: Record<string, string> = {};
+      if (apiKey) {
+        headers['X-MBX-APIKEY'] = apiKey;
+      }
+
       // Binance 24hr ticker endpoint
-      const response = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+      const response = await fetch('https://api.binance.com/api/v3/ticker/24hr', { headers });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       if (Array.isArray(data)) {

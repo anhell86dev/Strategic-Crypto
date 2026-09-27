@@ -21,6 +21,7 @@ import { AddStrategyModal } from './components/AddStrategyModal';
 import { DcaSimulatorModal } from './components/DcaSimulatorModal';
 import { INITIAL_STRATEGIES, INITIAL_ORDERS } from './data/initialStrategies';
 import { TradeLogService } from './services/tradeLogService';
+import { proxyService } from './services/proxyService';
 import { TradeLogEntry } from './types';
 
 export default function App() {
@@ -74,7 +75,10 @@ export default function App() {
 
   // Initialize and register periodic sync
   useEffect(() => {
-    loadStrategiesData(sheetsConfig);
+    // Initial fetch of Google Apps Script Proxy Properties
+    proxyService.fetchPropertiesFromProxy(sheetsConfig.proxyUrl).then(() => {
+      loadStrategiesData(sheetsConfig);
+    });
 
     // Subscribe to Binance connection status
     const unsubStatus = binanceStream.subscribeStatus((st) => {

@@ -1,4 +1,5 @@
 import { TimeframeCandle } from '../types';
+import { proxyService } from './proxyService';
 
 interface SymbolTimeframeData {
   candles: Record<string, TimeframeCandle>;
@@ -68,14 +69,16 @@ class MultiTimeframeService {
 
     try {
       const baseUrl = this.getBaseUrl();
+      const apiKey = proxyService.getBinanceApiKey();
+      const fetchOpts = apiKey ? { headers: { 'X-MBX-APIKEY': apiKey } } : undefined;
       
       // Fetch 5m, 15m, 1h (last 4 to derive 1h, 2h, 3h), 4h, 1d in parallel
       const [res5m, res15m, res1h, res4h, res1d] = await Promise.all([
-        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=5m&limit=2`).catch(() => null),
-        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=15m&limit=2`).catch(() => null),
-        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=1h&limit=14`).catch(() => null),
-        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=4h&limit=2`).catch(() => null),
-        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=1d&limit=2`).catch(() => null)
+        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=5m&limit=2`, fetchOpts).catch(() => null),
+        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=15m&limit=2`, fetchOpts).catch(() => null),
+        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=1h&limit=14`, fetchOpts).catch(() => null),
+        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=4h&limit=2`, fetchOpts).catch(() => null),
+        fetch(`${baseUrl}/api/v3/klines?symbol=${sym}&interval=1d&limit=2`, fetchOpts).catch(() => null)
       ]);
 
       const parseKline = (raw: any): { open: number; high: number; low: number; close: number; time: Date } | null => {

@@ -80,6 +80,14 @@ export interface SheetsConfig {
   autoSync: boolean;
   syncIntervalSeconds: number;
   usePresetFallback: boolean;
+  proxyUrl?: string;
+}
+
+export interface ProxyProperties {
+  BINANCE_API?: string;
+  GEMINI_API_KEY?: string;
+  SHEETS_API_KEY?: string;
+  BINANCE_API_SECRET?: string;
 }
 
 export interface TradeLogEntry {
