@@ -266,13 +266,8 @@ export default function App() {
       return true;
     });
 
-    // 4. Primary Radar Sort: Lowest distancePercent on top (Index 0)
-    filtered.sort((a, b) => {
-      const distA = a.distancePercent !== undefined ? a.distancePercent : 999999;
-      const distB = b.distancePercent !== undefined ? b.distancePercent : 999999;
-      return distA - distB;
-    });
-
+    // 4. Mantener el orden original de las estrategias según la hoja de cálculo
+    // La fila solo se alertará visualmente si el precio live está cercano a E1
     return filtered;
   }, [strategies, orders, tickers, searchQuery, activeFilters]);
 

@@ -14,7 +14,7 @@ export const LegendBanner: React.FC<LegendBannerProps> = ({ alertCount }) => {
         </div>
         <div>
           <p className="text-slate-200 font-medium leading-relaxed">
-            <strong className="text-cyan-300 font-bold">Motor de Ordenamiento Dinámico:</strong> Las estrategias se actualizan en tiempo real por distancia porcentual al precio de entrada planificado. Las operaciones más próximas al trigger lideran la cabecera.
+            <strong className="text-cyan-300 font-bold">Monitoreo de Entradas E1:</strong> La lista mantiene el orden original de tu hoja. Las filas se resaltarán y alertarán visualmente en tiempo real únicamente cuando el precio live esté cercano al nivel de entrada <strong className="text-white">E1</strong>.
           </p>
         </div>
       </div>

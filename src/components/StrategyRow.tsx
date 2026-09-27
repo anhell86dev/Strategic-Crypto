@@ -114,7 +114,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
         : isTpHit
         ? 'animate-tp-pulse border-emerald-500/70 bg-emerald-950/40 hover:bg-emerald-950/60 shadow-lg shadow-emerald-500/10'
         : isAlert
-        ? 'bg-blue-950/40 hover:bg-blue-950/60 border-cyan-500/40'
+        ? 'bg-cyan-950/40 hover:bg-cyan-950/60 border-cyan-400/80 shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/50'
         : 'bg-slate-900/30 hover:bg-slate-900/80 border-slate-800/80'
     }`}>
       {/* Ordered Execution Radar Row */}

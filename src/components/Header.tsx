@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { DensityToggle } from './DensityToggle';
 import { ConnectionStatus } from '../types';
+import { GuatemalaClock } from './GuatemalaClock';
 
 interface HeaderProps {
   sheetsStatus: ConnectionStatus;
@@ -130,6 +131,9 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Primary Actions & Tool Bar */}
         <div className="flex items-center flex-wrap gap-3 justify-end">
+          {/* Reloj con tiempo de Guatemala (GMT-6) */}
+          <GuatemalaClock />
+
           {/* Density Mode Switcher (Compact / Standard / Spacious) */}
           <DensityToggle />
 

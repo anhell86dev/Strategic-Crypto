@@ -130,8 +130,8 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
             )}
 
             <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 font-medium">
-              <ArrowUpDown className="w-4 h-4 text-cyan-400" />
-              <span>Prioridad: Proximidad a Entrada</span>
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+              <span>Alerta activa si precio está cercano a E1</span>
             </div>
           </div>
 
