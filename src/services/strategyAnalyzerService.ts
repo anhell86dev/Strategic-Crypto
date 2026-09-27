@@ -1,4 +1,5 @@
-import { StrategyWithOrders } from '../types';
+import { StrategyWithOrders, TrafficLightInfo } from '../types';
+import { calculateRiskReward } from '../utils/riskReward';
 
 export type HistoricalAnalysisStatus = 
   | 'INVALIDADO' // Tocó SL
@@ -380,6 +381,136 @@ export class StrategyAnalyzerService {
       sheetCellTarget,
       sheetRowIndex: sheetRowNumber
     };
+  }
+
+  /**
+   * Evaluates the Traffic Light (Semáforo) for a strategy according to price path validation:
+   * - VERDE: No ha tocado ningún SL, ni TP antes que alguna Entrada, está en la zona de las entradas / vigente
+   * - NARANJA: Tocó los TP antes de las entradas (se escapó o tardía)
+   * - ROJO: Tocó SL
+   */
+  public static evaluateTrafficLight(strategy: StrategyWithOrders): import('../types').TrafficLightInfo {
+    const {
+      type,
+      entryPrice,
+      e2Price,
+      e3Price,
+      stopLoss,
+      orders = [],
+      currentPrice,
+      high24h,
+      low24h
+    } = strategy;
+
+    const isLong = type === 'LONG';
+    const live = currentPrice || entryPrice;
+    const e1 = entryPrice;
+    const e2 = e2Price && e2Price > 0 ? e2Price : (isLong ? e1 * 0.985 : e1 * 1.015);
+    const e3 = e3Price && e3Price > 0 ? e3Price : (isLong ? e1 * 0.97 : e1 * 1.03);
+    const sl = stopLoss;
+    const tp1 = orders[0]?.targetPrice || (isLong ? e1 * 1.03 : e1 * 0.97);
+
+    // Calculate Risk:Reward using utility
+    const rr = calculateRiskReward({
+      entryPrice: e1,
+      stopLoss: sl,
+      type,
+      orders
+    });
+    const riskRewardRatio = rr.maxRiskReward > 0 ? rr.maxRiskReward : 2.0;
+
+    // Distance to Entry 1
+    const distToE1 = e1 > 0 ? (Math.abs(live - e1) / e1) * 100 : 999;
+    const inDcaZone = isLong ? (live <= e1 && live >= e3) : (live >= e1 && live <= e3);
+    const effectiveDistance = inDcaZone ? 0 : distToE1;
+
+    // 1. ROJO: Tocó Stop Loss
+    const slHit = isLong 
+      ? (live <= sl || (low24h !== undefined && low24h <= sl && live <= e1))
+      : (live >= sl || (high24h !== undefined && high24h >= sl && live >= e1));
+
+    if (slHit) {
+      return {
+        status: 'ROJO',
+        label: 'SL TOCADO',
+        color: 'text-rose-400',
+        badgeBg: 'bg-rose-950/80',
+        badgeBorder: 'border-rose-500/60',
+        badgeText: 'text-rose-300',
+        reason: `El precio alcanzó el Stop Loss ($${sl}). Operación invalidada por gestión de riesgo.`,
+        distanceToEntryPct: distToE1,
+        riskRewardRatio,
+        slHit: true,
+        e1Hit: false,
+        tpHitBeforeEntry: false,
+        rankScore: 0
+      };
+    }
+
+    // 2. NARANJA: Tocó Take Profit antes de las entradas o se escapó directo a TP
+    const tpHit = isLong ? (live >= tp1) : (live <= tp1);
+    if (tpHit) {
+      return {
+        status: 'NARANJA',
+        label: 'TP ANTES DE ENTRADA',
+        color: 'text-amber-400',
+        badgeBg: 'bg-amber-950/80',
+        badgeBorder: 'border-amber-500/60',
+        badgeText: 'text-amber-300',
+        reason: `El precio alcanzó los objetivos (TP1: $${tp1}) antes de llenar las entradas planificadas.`,
+        distanceToEntryPct: distToE1,
+        riskRewardRatio,
+        slHit: false,
+        e1Hit: false,
+        tpHitBeforeEntry: true,
+        rankScore: 10
+      };
+    }
+
+    // 3. VERDE: No tocó SL, No tocó TP antes, está en la zona de las entradas / vigente
+    // Score compuesto para el Top 5: Mayor R:B y Menor distancia a la entrada E1
+    const proximityScore = Math.max(0, 100 - effectiveDistance * 18);
+    const rbScore = Math.min(100, riskRewardRatio * 22);
+    const rankScore = (rbScore * 0.6) + (proximityScore * 0.4);
+
+    let detailReason = '';
+    if (inDcaZone) {
+      detailReason = `En zona de entrada activa (entre E1 $${e1} y E3 $${e3}). SL intacto, TPs libres.`;
+    } else if (distToE1 <= 1.5) {
+      detailReason = `Muy cerca de entrada: a solo ${distToE1.toFixed(2)}% de E1 ($${e1}). R:B ${riskRewardRatio}:1.`;
+    } else {
+      detailReason = `Válida: No ha tocado SL ni TP. A ${distToE1.toFixed(2)}% de E1 con R:B ${riskRewardRatio}:1.`;
+    }
+
+    return {
+      status: 'VERDE',
+      label: inDcaZone ? 'EN ZONA DCA' : 'EN ZONA / VÁLIDA',
+      color: 'text-emerald-400',
+      badgeBg: 'bg-emerald-950/80',
+      badgeBorder: 'border-emerald-500/60',
+      badgeText: 'text-emerald-300',
+      reason: detailReason,
+      distanceToEntryPct: distToE1,
+      riskRewardRatio,
+      slHit: false,
+      e1Hit: inDcaZone,
+      tpHitBeforeEntry: false,
+      rankScore
+    };
+  }
+
+  /**
+   * Returns the Top N strategies with VERDE traffic light, ordered by proximity to entry and highest R:B
+   */
+  public static getTopGreenStrategies(strategies: StrategyWithOrders[], limit = 5): StrategyWithOrders[] {
+    return [...strategies]
+      .filter(s => s.trafficLight?.status === 'VERDE')
+      .sort((a, b) => {
+        const scoreA = a.trafficLight?.rankScore || 0;
+        const scoreB = b.trafficLight?.rankScore || 0;
+        return scoreB - scoreA;
+      })
+      .slice(0, limit);
   }
 
   /**

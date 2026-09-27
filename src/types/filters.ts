@@ -2,6 +2,7 @@ export type FilterType =
   | 'DISTANCE_LE'
   | 'DIRECTION'
   | 'STATUS'
+  | 'TRAFFIC_LIGHT'
   | 'ALERT_ZONE'
   | 'TP_HIT'
   | 'LEVERAGE_GE'

@@ -386,6 +386,90 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
           Filtros Rápidos:
         </span>
 
+        {/* Preset: Semáforo Verde */}
+        <button
+          type="button"
+          onClick={() => {
+            const exists = activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE');
+            if (exists) {
+              const rule = activeFilters.find(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE');
+              if (rule) onRemoveFilter(rule.id);
+            } else {
+              onAddFilter({
+                id: 'preset-traffic-verde',
+                type: 'TRAFFIC_LIGHT',
+                label: 'Semáforo',
+                displayValue: '🟢 Verde (En Zona)',
+                value: 'VERDE'
+              });
+            }
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE')
+              ? 'bg-emerald-400 text-slate-950 shadow-md shadow-emerald-400/30 ring-2 ring-emerald-300'
+              : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>🟢 Semáforo Verde</span>
+        </button>
+
+        {/* Preset: Semáforo Naranja */}
+        <button
+          type="button"
+          onClick={() => {
+            const exists = activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'NARANJA');
+            if (exists) {
+              const rule = activeFilters.find(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'NARANJA');
+              if (rule) onRemoveFilter(rule.id);
+            } else {
+              onAddFilter({
+                id: 'preset-traffic-naranja',
+                type: 'TRAFFIC_LIGHT',
+                label: 'Semáforo',
+                displayValue: '🟠 Naranja (TP antes)',
+                value: 'NARANJA'
+              });
+            }
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'NARANJA')
+              ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30'
+              : 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border border-amber-500/40'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-amber-400" />
+          <span>🟠 TP antes</span>
+        </button>
+
+        {/* Preset: Semáforo Rojo */}
+        <button
+          type="button"
+          onClick={() => {
+            const exists = activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'ROJO');
+            if (exists) {
+              const rule = activeFilters.find(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'ROJO');
+              if (rule) onRemoveFilter(rule.id);
+            } else {
+              onAddFilter({
+                id: 'preset-traffic-rojo',
+                type: 'TRAFFIC_LIGHT',
+                label: 'Semáforo',
+                displayValue: '🔴 Rojo (SL)',
+                value: 'ROJO'
+              });
+            }
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'ROJO')
+              ? 'bg-rose-500 text-white shadow-md shadow-rose-500/30'
+              : 'bg-rose-950/70 hover:bg-rose-900/80 text-rose-300 border border-rose-500/40'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-rose-500" />
+          <span>🔴 SL Tocado</span>
+        </button>
+
         {/* Preset: R:B >= 1:2.0 */}
         <button
           type="button"

@@ -79,6 +79,24 @@ export interface TakeProfitOrder {
   label?: string; // e.g. "Gatillo de BE", "Objetivo Intermedio", "Target Max"
 }
 
+export type TrafficLightStatus = 'VERDE' | 'NARANJA' | 'ROJO';
+
+export interface TrafficLightInfo {
+  status: TrafficLightStatus;
+  label: string; // "VÁLIDA / EN ZONA", "TP ANTES DE ENTRADA", "SL TOCADO"
+  color: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  reason: string;
+  distanceToEntryPct: number;
+  riskRewardRatio: number;
+  rankScore?: number;
+  e1Hit?: boolean;
+  slHit?: boolean;
+  tpHitBeforeEntry?: boolean;
+}
+
 export interface StrategyWithOrders extends Strategy {
   orders: TakeProfitOrder[];
   currentPrice?: number;
@@ -93,6 +111,7 @@ export interface StrategyWithOrders extends Strategy {
   isAlertZone?: boolean;
   effectiveThreshold?: number;
   riskRewardRatio?: number;
+  trafficLight?: TrafficLightInfo;
   timeframeCandles?: Record<string, TimeframeCandle>;
   atr14?: number;
   atrPercent?: number;

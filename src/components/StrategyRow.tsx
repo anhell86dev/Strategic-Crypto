@@ -215,6 +215,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
   const isAlert = strategy.isAlertZone;
   const symbolClean = strategy.symbol.replace('USDT', '');
   const displayStrategyName = strategy.strategyName || strategy.coinName || symbolClean;
+  const trafficLight = strategy.trafficLight;
 
   return (
     <div className={`border-b transition-all duration-300 relative ${
@@ -222,6 +223,10 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
         ? 'animate-tp-burst border-emerald-400 bg-emerald-950/70 shadow-2xl shadow-emerald-500/30 ring-2 ring-emerald-400'
         : isTpHit
         ? 'animate-tp-pulse border-emerald-500/70 bg-emerald-950/40 hover:bg-emerald-950/60 shadow-lg shadow-emerald-500/10'
+        : trafficLight?.status === 'ROJO'
+        ? 'bg-rose-950/20 hover:bg-rose-950/40 border-rose-900/40'
+        : trafficLight?.status === 'NARANJA'
+        ? 'bg-amber-950/20 hover:bg-amber-950/40 border-amber-900/40'
         : isAlert
         ? 'bg-cyan-950/40 hover:bg-cyan-950/60 border-cyan-400/80 shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/50'
         : 'bg-slate-900/30 hover:bg-slate-900/80 border-slate-800/80'
@@ -232,8 +237,8 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
         className="px-4 sm:px-6 py-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4 cursor-pointer select-none"
       >
         
-        {/* Left Section: [1. Nombre Estrategia & TIPO abajo] + [2. Riesgo Beneficio] */}
-        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 sm:gap-6 shrink-0">
+        {/* Left Section: [1. Nombre Estrategia & TIPO abajo] + [2. Riesgo Beneficio] + [3. Semáforo] */}
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-3 sm:gap-5 shrink-0">
           
           {/* Multi-Selection Checkbox & Rank */}
           <div className="flex items-center gap-2">
@@ -270,8 +275,65 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             </div>
           </div>
 
+          {/* Semáforo de Validación de Recorrido */}
+          <div className="shrink-0">
+            {trafficLight?.status === 'VERDE' && (
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 shadow-md shadow-emerald-500/20"
+                title={`SEMÁFORO VERDE: ${trafficLight.reason}`}
+              >
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+                </span>
+                <div className="flex flex-col text-left">
+                  <span className="text-[10px] font-black tracking-wider uppercase text-emerald-300">
+                    VERDE
+                  </span>
+                  <span className="text-[8px] font-mono text-emerald-400/90 -mt-0.5 leading-tight">
+                    {trafficLight.label}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {trafficLight?.status === 'NARANJA' && (
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-950/90 border border-amber-500/60 text-amber-300 shadow-md shadow-amber-500/20"
+                title={`SEMÁFORO NARANJA: ${trafficLight.reason}`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shadow-sm"></span>
+                <div className="flex flex-col text-left">
+                  <span className="text-[10px] font-black tracking-wider uppercase text-amber-300">
+                    NARANJA
+                  </span>
+                  <span className="text-[8px] font-mono text-amber-400/90 -mt-0.5 leading-tight">
+                    TP PREVIO
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {trafficLight?.status === 'ROJO' && (
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-950/90 border border-rose-500/60 text-rose-300 shadow-md shadow-rose-500/20"
+                title={`SEMÁFORO ROJO: ${trafficLight.reason}`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow-sm"></span>
+                <div className="flex flex-col text-left">
+                  <span className="text-[10px] font-black tracking-wider uppercase text-rose-300">
+                    ROJO
+                  </span>
+                  <span className="text-[8px] font-mono text-rose-400/90 -mt-0.5 leading-tight">
+                    SL TOCADO
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 1. Bloque de Identificación: PAR arriba, Nombre de Estrategia + Riesgo Beneficio abajo, y Fecha + Tiempo Transcurrido */}
-          <div className="w-64 sm:w-80 shrink-0">
+          <div className="w-56 sm:w-72 shrink-0">
             {/* PAR arriba con TIPO (LONG / SHORT) */}
             <div className="flex items-center flex-wrap gap-2">
               <span className="font-extrabold text-base sm:text-lg text-white font-mono tracking-tight">
@@ -292,7 +354,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             {/* Nombre de Estrategia abajo del Par + Etiqueta de Riesgo Beneficio al lado */}
             <div className="mt-1.5 flex items-center flex-wrap gap-1.5">
               <div 
-                className="font-bold text-xs sm:text-sm font-mono text-cyan-300 tracking-tight truncate max-w-[200px] sm:max-w-[230px]" 
+                className="font-bold text-xs sm:text-sm font-mono text-cyan-300 tracking-tight truncate max-w-[180px] sm:max-w-[210px]" 
                 title={displayStrategyName}
               >
                 {displayStrategyName}

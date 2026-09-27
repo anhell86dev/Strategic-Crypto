@@ -141,9 +141,10 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
 
         {/* Column Guide Header (Hidden on small mobile, visible on desktop) */}
         <div className="hidden xl:flex items-center justify-between px-6 py-2.5 bg-slate-950/80 border-b border-slate-800/80 text-[11px] font-mono text-slate-400 font-bold uppercase tracking-wider">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-5">
             <div className="w-7 text-center">#</div>
-            <div className="w-64 sm:w-80">1. Par · Estrategia · R:B · Fecha</div>
+            <div className="w-24">Semáforo</div>
+            <div className="w-56 sm:w-72">1. Par · Estrategia · R:B · Fecha</div>
           </div>
           <div className="flex-1 px-4 text-center">
             2. Escala de Precios Horizontal (Stop Loss · Entrada · Precio Live · Take Profits)

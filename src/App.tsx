@@ -28,6 +28,8 @@ import { proxyService } from './services/proxyService';
 import { TradeLogEntry } from './types';
 import { BinanceFuturesTab } from './components/BinanceFuturesTab';
 import { BinanceGatewayScreen } from './components/BinanceGatewayScreen';
+import { TopGreenOpportunities } from './components/TopGreenOpportunities';
+import { StrategyAnalyzerService } from './services/strategyAnalyzerService';
 
 export default function App() {
   // Raw Data State (initialized immediately with 74+ strategies from stored custom data or presets)
@@ -150,8 +152,8 @@ export default function App() {
     setSearchQuery('');
   };
 
-  // Dynamic Radar Engine (Calculate Distance %, Alert Zone & Dynamic Filters Application)
-  const sortedAndFilteredStrategies = useMemo(() => {
+  // Base Enhanced Strategies with live tickers, R:B and Traffic Light (Semáforo)
+  const allEnhancedStrategies = useMemo(() => {
     // 1. Group orders by strategy ID
     const ordersMap = new Map<number, TakeProfitOrder[]>();
     orders.forEach(order => {
@@ -160,8 +162,8 @@ export default function App() {
       ordersMap.set(order.strategyId, current);
     });
 
-    // 2. Enhance strategies with real-time ticker data and calculate distance
-    const enhanced: StrategyWithOrders[] = strategies.map(strat => {
+    // 2. Enhance strategies with real-time ticker data, distance, R:B, and Semáforo validation
+    return strategies.map(strat => {
       const ticker = tickers.get(strat.symbol.toUpperCase());
       const currentPrice = ticker?.price;
       const effectiveThreshold = strat.customAlertThreshold !== undefined ? strat.customAlertThreshold : 1.5;
@@ -180,7 +182,7 @@ export default function App() {
         }
       }
 
-      return {
+      const stratWithOrders: StrategyWithOrders = {
         ...strat,
         orders: ordersMap.get(strat.id) || [],
         currentPrice,
@@ -194,10 +196,24 @@ export default function App() {
         isAlertZone,
         effectiveThreshold
       };
-    });
 
-    // 3. Apply Dynamic Composable Filters
-    const filtered = enhanced.filter(strat => {
+      // Evaluate Semáforo (Verde, Naranja, Rojo) based on historical path & live price
+      const trafficLight = StrategyAnalyzerService.evaluateTrafficLight(stratWithOrders);
+      stratWithOrders.trafficLight = trafficLight;
+
+      return stratWithOrders;
+    });
+  }, [strategies, orders, tickers]);
+
+  // Top 5 Estrategias con Semáforo Verde (Más cerca de Entrada y Mejor R:B)
+  const topGreenStrategies = useMemo(() => {
+    return StrategyAnalyzerService.getTopGreenStrategies(allEnhancedStrategies, 5);
+  }, [allEnhancedStrategies]);
+
+  // Dynamic Radar Engine (Calculate Distance %, Alert Zone & Dynamic Filters Application)
+  const sortedAndFilteredStrategies = useMemo(() => {
+    // Apply Dynamic Composable Filters
+    const filtered = allEnhancedStrategies.filter(strat => {
       // A. Text Search
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase().trim();
@@ -221,6 +237,10 @@ export default function App() {
           }
           case 'STATUS': {
             if (strat.status !== rule.value) return false;
+            break;
+          }
+          case 'TRAFFIC_LIGHT': {
+            if (strat.trafficLight?.status !== rule.value) return false;
             break;
           }
           case 'ALERT_ZONE': {
@@ -274,10 +294,8 @@ export default function App() {
       return true;
     });
 
-    // 4. Mantener el orden original de las estrategias según la hoja de cálculo
-    // La fila solo se alertará visualmente si el precio live está cercano a E1
     return filtered;
-  }, [strategies, orders, tickers, searchQuery, activeFilters]);
+  }, [allEnhancedStrategies, searchQuery, activeFilters]);
 
   // Audio Toggle
   const handleToggleSound = () => {
@@ -492,6 +510,30 @@ export default function App() {
 
             {/* Overview KPI Stats Bar */}
             <RadarStatsBar strategies={sortedAndFilteredStrategies} />
+
+            {/* Top 5 Oportunidades: Semáforo Verde (En Zona & Mejor R:B) */}
+            <TopGreenOpportunities
+              topStrategies={topGreenStrategies}
+              onSelectStrategy={(strat) => {
+                setSearchQuery(strat.symbol);
+              }}
+              onFilterGreen={() => {
+                const isGreenActive = activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE');
+                if (isGreenActive) {
+                  const rule = activeFilters.find(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE');
+                  if (rule) handleRemoveFilter(rule.id);
+                } else {
+                  handleAddFilter({
+                    id: 'preset-traffic-verde',
+                    type: 'TRAFFIC_LIGHT',
+                    label: 'Semáforo',
+                    displayValue: '🟢 Verde (En Zona)',
+                    value: 'VERDE'
+                  });
+                }
+              }}
+              isGreenFilterActive={activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE')}
+            />
 
             {/* Dynamic Composable Filter Bar */}
             <DynamicFilterBar
