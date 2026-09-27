@@ -15,8 +15,112 @@ import {
   Copy,
   Check,
   Percent,
-  Scale
+  Scale,
+  Clock
 } from 'lucide-react';
+
+export const formatStrategyPublicationDate = (rawDate?: string, stratName?: string): string => {
+  if (!rawDate && !stratName) return '';
+  const str = rawDate || '';
+
+  const monthMap: Record<string, string> = {
+    Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+    Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12'
+  };
+
+  const dateMatch = str.match(/([A-Z]{3})\s+(\d{1,2})\s+(\d{4})/i);
+  const timeMatches = [...str.matchAll(/(\d{2}):(\d{2})(?::\d{2})?/g)];
+
+  let formattedTime = '';
+  if (timeMatches.length >= 2) {
+    formattedTime = `${timeMatches[1][1]}:${timeMatches[1][2]}`;
+  } else if (timeMatches.length === 1) {
+    formattedTime = `${timeMatches[0][1]}:${timeMatches[0][2]}`;
+  }
+
+  if (dateMatch && formattedTime) {
+    const month = monthMap[dateMatch[1]] || dateMatch[1];
+    const day = dateMatch[2].padStart(2, '0');
+    const year = dateMatch[3];
+    return `${day}/${month}/${year} · ${formattedTime} (GMT-6)`;
+  }
+
+  // Fallback pattern matching in strategyName (e.g. AAVE_PULLBACK_26-09-26_06:39)
+  const nameMatch = (stratName || '').match(/_(\d{2})[-/.](\d{2})[-/.](\d{2,4})_(\d{2}:\d{2})/);
+  if (nameMatch) {
+    const [, d, m, y, t] = nameMatch;
+    const fullYear = y.length === 2 ? `20${y}` : y;
+    return `${d}/${m}/${fullYear} · ${t} (GMT-6)`;
+  }
+
+  if (str.length > 0 && str.length < 35) {
+    return str;
+  }
+
+  return str.slice(0, 24);
+};
+
+export const getStrategyTimeDifference = (rawDate?: string, stratName?: string): string => {
+  if (!rawDate && !stratName) return '';
+  const str = rawDate || '';
+
+  const monthMap: Record<string, string> = {
+    Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+    Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12'
+  };
+
+  let targetDate: Date | null = null;
+  const dateMatch = str.match(/([A-Z]{3})\s+(\d{1,2})\s+(\d{4})/i);
+  const timeMatches = [...str.matchAll(/(\d{2}):(\d{2})(?::\d{2})?/g)];
+
+  let formattedTime = '';
+  if (timeMatches.length >= 2) {
+    formattedTime = `${timeMatches[1][1]}:${timeMatches[1][2]}`;
+  } else if (timeMatches.length === 1) {
+    formattedTime = `${timeMatches[0][1]}:${timeMatches[0][2]}`;
+  }
+
+  if (dateMatch && formattedTime) {
+    const month = monthMap[dateMatch[1]] || dateMatch[1];
+    const day = dateMatch[2].padStart(2, '0');
+    const year = dateMatch[3];
+    targetDate = new Date(`${year}-${month}-${day}T${formattedTime}:00-06:00`);
+  }
+
+  if (!targetDate || isNaN(targetDate.getTime())) {
+    const nameMatch = (stratName || '').match(/_(\d{2})[-/.](\d{2})[-/.](\d{2,4})_(\d{2}:\d{2})/);
+    if (nameMatch) {
+      const [, d, m, y, t] = nameMatch;
+      const fullYear = y.length === 2 ? `20${y}` : y;
+      targetDate = new Date(`${fullYear}-${m}-${d}T${t}:00-06:00`);
+    }
+  }
+
+  if (!targetDate || isNaN(targetDate.getTime())) {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) targetDate = parsed;
+  }
+
+  if (!targetDate || isNaN(targetDate.getTime())) return '';
+
+  const now = new Date();
+  const diffMs = now.getTime() - targetDate.getTime();
+  const totalMinutes = Math.floor(Math.abs(diffMs) / 60000);
+  const totalHours = Math.floor(totalMinutes / 60);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  const minutes = totalMinutes % 60;
+
+  const prefix = diffMs >= 0 ? 'Hace ' : 'En ';
+
+  if (days > 0) {
+    return `${prefix}${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${prefix}${hours}h ${minutes}m`;
+  }
+  return `${prefix}${minutes}m`;
+};
 
 interface StrategyRowProps {
   strategy: StrategyWithOrders;
@@ -161,21 +265,16 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             </div>
           </div>
 
-          {/* 1. Nombre Estrategia (Valor exacto de la Celda A de Ordenes) con TIPO como etiqueta abajo */}
-          <div className="w-56 sm:w-64 shrink-0">
-            {/* Nombre de Estrategia extraído de la celda A de Ordenes */}
-            <div className="font-extrabold text-sm sm:text-base font-mono text-cyan-300 tracking-tight truncate leading-snug" title={displayStrategyName}>
-              {displayStrategyName}
-            </div>
-
-            {/* Sublínea con Activo (Símbolo) y TIPO (LONG / SHORT) como etiqueta abajo */}
-            <div className="mt-1.5 flex items-center flex-wrap gap-1.5">
-              <span className="font-bold text-[11px] text-white font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-700/80 shadow-xs">
+          {/* 1. Bloque de Identificación: PAR arriba, Nombre de Estrategia + Riesgo Beneficio abajo, y Fecha + Tiempo Transcurrido */}
+          <div className="w-64 sm:w-80 shrink-0">
+            {/* PAR arriba con TIPO (LONG / SHORT) */}
+            <div className="flex items-center flex-wrap gap-2">
+              <span className="font-extrabold text-base sm:text-lg text-white font-mono tracking-tight">
                 {symbolClean}/USDT
               </span>
 
-              {/* TIPO (LONG / SHORT) como etiqueta */}
-              <span className={`inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-0.5 rounded-md font-mono tracking-wider ${
+              {/* TIPO (LONG / SHORT) como etiqueta al lado del Par */}
+              <span className={`inline-flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-md font-mono tracking-wider ${
                 isLong
                   ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/80 shadow-xs'
                   : 'bg-rose-950 text-rose-300 border border-rose-700/80 shadow-xs'
@@ -183,39 +282,55 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
                 {isLong ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                 {strategy.type}
               </span>
-
-              {strategy.leverage && (
-                <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
-                  {strategy.leverage}x
-                </span>
-              )}
-
-              {strategy.nominalValue && (
-                <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-800/60 text-emerald-400" title={`Capital: $${strategy.capitalAssigned || 5} × ${strategy.leverage || 5}x`}>
-                  Nominal: ${strategy.nominalValue.toFixed(0)}
-                </span>
-              )}
             </div>
-          </div>
 
-          {/* 2. Riesgo Beneficio (Columna) */}
-          <div className="w-28 sm:w-32 shrink-0">
-            <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5 font-semibold">
-              Riesgo Beneficio
-            </span>
-            <span 
-              title={`Riesgo: -${rr.slDistancePct.toFixed(1)}% | Recompensa Máx: +${rr.maxRewardPct.toFixed(1)}%`}
-              className={`inline-flex items-center gap-1 text-xs sm:text-sm font-black px-2.5 py-0.5 rounded-md font-mono border ${
-                rr.maxRiskReward >= 3.0
-                  ? 'bg-purple-950 text-purple-300 border-purple-600/80'
-                  : rr.maxRiskReward >= 2.0
-                  ? 'bg-cyan-950 text-cyan-300 border-cyan-600/80'
-                  : 'bg-emerald-950 text-emerald-300 border-emerald-700/80'
-              }`}
-            >
-              <Scale className="w-3.5 h-3.5 text-cyan-400" />
-              <span>{rr.formattedRatio}</span>
-            </span>
+            {/* Nombre de Estrategia abajo del Par + Etiqueta de Riesgo Beneficio al lado */}
+            <div className="mt-1.5 flex items-center flex-wrap gap-1.5">
+              <div 
+                className="font-bold text-xs sm:text-sm font-mono text-cyan-300 tracking-tight truncate max-w-[200px] sm:max-w-[230px]" 
+                title={displayStrategyName}
+              >
+                {displayStrategyName}
+              </div>
+
+              {/* Riesgo Beneficio como etiqueta a la par de la estrategia */}
+              <span 
+                title={`Riesgo: -${rr.slDistancePct.toFixed(1)}% | Recompensa Máx: +${rr.maxRewardPct.toFixed(1)}%`}
+                className={`inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md font-mono border ${
+                  rr.maxRiskReward >= 3.0
+                    ? 'bg-purple-950 text-purple-300 border-purple-600/80'
+                    : rr.maxRiskReward >= 2.0
+                    ? 'bg-cyan-950 text-cyan-300 border-cyan-600/80'
+                    : 'bg-emerald-950 text-emerald-300 border-emerald-700/80'
+                }`}
+              >
+                <Scale className="w-3 h-3 text-cyan-400" />
+                <span>R:B {rr.formattedRatio}</span>
+              </span>
+            </div>
+
+            {/* Fecha y Hora de Publicación (Columna B) */}
+            {strategy.date && (
+              <div 
+                className="mt-1 flex items-center gap-1.5 text-[10px] font-mono text-slate-400 truncate"
+                title={`Fecha / Hora de Registro (Columna B): ${strategy.date}`}
+              >
+                <Clock className="w-3 h-3 text-cyan-400/80 shrink-0" />
+                <span className="text-slate-300 font-medium">
+                  {formatStrategyPublicationDate(strategy.date, strategy.strategyName)}
+                </span>
+              </div>
+            )}
+
+            {/* Diferencia en horas/tiempo desde la publicación hasta la fecha actual abajo de la fecha */}
+            {strategy.date && (
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-mono text-amber-400/90 pl-4.5">
+                <span className="text-slate-500">•</span>
+                <span className="font-bold bg-amber-950/50 px-1.5 py-0.2 rounded border border-amber-900/60">
+                  {getStrategyTimeDifference(strategy.date, strategy.strategyName)}
+                </span>
+              </div>
+            )}
           </div>
 
         </div>

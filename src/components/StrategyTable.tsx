@@ -141,11 +141,10 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
         <div className="hidden xl:flex items-center justify-between px-6 py-2.5 bg-slate-950/80 border-b border-slate-800/80 text-[11px] font-mono text-slate-400 font-bold uppercase tracking-wider">
           <div className="flex items-center gap-6">
             <div className="w-7 text-center">#</div>
-            <div className="w-48 sm:w-56">1. Estrategia & Tipo</div>
-            <div className="w-28 sm:w-32">2. Riesgo Beneficio</div>
+            <div className="w-64 sm:w-80">1. Par · Estrategia · R:B · Fecha</div>
           </div>
           <div className="flex-1 px-4 text-center">
-            3. Escala de Precios Horizontal (Stop Loss · Entrada · Precio Live · Take Profits)
+            2. Escala de Precios Horizontal (Stop Loss · Entrada · Precio Live · Take Profits)
           </div>
           <div className="w-36 text-right">
             Acciones
