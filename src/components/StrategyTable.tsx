@@ -10,7 +10,9 @@ import {
   CheckSquare, 
   Square, 
   X, 
-  Sparkles 
+  Sparkles,
+  Scale,
+  SlidersHorizontal
 } from 'lucide-react';
 
 interface StrategyTableProps {
@@ -83,8 +85,8 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
     <div className="relative">
       <div className="bg-slate-900/40 border border-slate-800/90 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xs">
         
-        {/* Table Header Bar */}
-        <div className="bg-slate-900/95 border-b border-slate-800 px-4 sm:px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+        {/* Table Top Toolbar */}
+        <div className="bg-slate-900/95 border-b border-slate-800 px-4 sm:px-6 py-3.5 flex items-center justify-between flex-wrap gap-3">
           
           <div className="flex items-center gap-4">
             {/* Select All Checkbox */}
@@ -129,10 +131,27 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
 
             <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400 font-medium">
               <ArrowUpDown className="w-4 h-4 text-cyan-400" />
-              <span>Orden: Menor distancia primero</span>
+              <span>Prioridad: Proximidad a Entrada</span>
             </div>
           </div>
 
+        </div>
+
+        {/* Column Guide Header (Hidden on small mobile, visible on desktop) */}
+        <div className="hidden xl:flex items-center justify-between px-6 py-2.5 bg-slate-950/80 border-b border-slate-800/80 text-[11px] font-mono text-slate-400 font-bold uppercase tracking-wider">
+          <div className="flex items-center gap-6">
+            <div className="w-7 text-center">#</div>
+            <div className="w-40 sm:w-48">1. Nombre Estrategia</div>
+            <div className="w-20">2. Tipo</div>
+            <div className="w-28 sm:w-32">3. Riesgo Beneficio</div>
+            <div className="w-32 sm:w-36">4. Precio Actual</div>
+          </div>
+          <div className="flex-1 px-4 text-center">
+            5. Escala de Precios Horizontal (Entrada · Stop Loss · Take Profits)
+          </div>
+          <div className="w-36 text-right">
+            Acciones
+          </div>
         </div>
 
         {/* Strategies List */}
@@ -156,7 +175,7 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
             Mostrando <strong className="text-white">{strategies.length}</strong> de <span className="text-slate-500">{totalUnfilteredCount}</span> estrategias {selectedCount > 0 && `· ${selectedCount} seleccionadas`}
           </div>
           <div className="hidden sm:block">
-            Ticks en tiempo real vía Binance WebSockets
+            Extraído y sincronizado con Google Sheets · Binance Live WSS
           </div>
         </div>
       </div>
@@ -185,10 +204,7 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
               {onToggleSelectAll && (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (isAllSelected) onToggleSelectAll();
-                    else onToggleSelectAll();
-                  }}
+                  onClick={onToggleSelectAll}
                   className="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
                   title="Deseleccionar todas"
                 >

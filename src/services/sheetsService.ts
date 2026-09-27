@@ -15,14 +15,19 @@ export const DEFAULT_SHEETS_CONFIG: SheetsConfig = {
   proxyUrl: DEFAULT_PROXY_SERVER_URL,
 };
 
-// Sheet name candidates to try when fetching from Google Sheets
+// Sheet name candidates to try when fetching from Google Sheets (prioritizing Ordenes)
 const SHEET_NAME_CANDIDATES = [
+  'Ordenes',
+  'Órdenes',
+  'Orders',
   'Estrategia',
   'Estrategias',
+  'Trades',
+  'TakeProfits',
+  'TPs',
   'Sheet1',
   'Hoja 1',
   'Hoja1',
-  'Trades',
   'Crypto',
   'Radar',
   'Estrategias_74'
