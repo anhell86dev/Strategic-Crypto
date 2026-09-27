@@ -72,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="border-b border-slate-800/90 bg-slate-950/95 backdrop-blur-md sticky top-0 z-30 transition-all shadow-md">
       {/* Primary Top Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         
         {/* Brand Zone & Semáforos de Estado */}
         <div className="flex items-center justify-between md:justify-start gap-6">

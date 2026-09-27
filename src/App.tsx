@@ -449,7 +449,7 @@ export default function App() {
       />
 
       {/* 2. Main Body Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-5">
         
         {/* Leyenda Informativa */}
         <LegendBanner alertCount={alertCount} />

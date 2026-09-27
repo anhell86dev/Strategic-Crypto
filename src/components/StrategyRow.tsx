@@ -257,7 +257,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
         </div>
 
         {/* Middle Section: Live Price, 15m Sparkline, Planned Entry & R:B, Radar Distance */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 flex-1 max-w-2xl items-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 flex-1 items-center px-1 lg:px-4">
           
           {/* 1. Precio Actual (Live Ticker con Ping) */}
           <div className={`p-2 rounded-xl transition-colors ${flashClass}`}>

@@ -79,7 +79,7 @@ export const DynamicFilterBar: React.FC<DynamicFilterBarProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         
         {/* Search Field */}
-        <div className="relative flex-1 max-w-lg">
+        <div className="relative flex-1 max-w-xl xl:max-w-2xl">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
