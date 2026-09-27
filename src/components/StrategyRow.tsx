@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StrategyWithOrders } from '../types';
 import { TakeProfitAccordion } from './TakeProfitAccordion';
+import { MiniSparkline } from './MiniSparkline';
 import { 
   Target, 
   ChevronDown, 
@@ -135,8 +136,8 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({ strategy, rankIndex })
           </div>
         </div>
 
-        {/* Middle Section: Live Price, Planned Entry, Radar Distance */}
-        <div className="grid grid-cols-3 gap-3 sm:gap-6 flex-1 max-w-xl items-center">
+        {/* Middle Section: Live Price, 15m Sparkline, Planned Entry, Radar Distance */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 flex-1 max-w-2xl items-center">
           
           {/* 1. Precio Actual (Live Ticker con Ping) */}
           <div className={`p-1.5 rounded-lg transition-colors ${flashClass}`}>
@@ -159,7 +160,19 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({ strategy, rankIndex })
             )}
           </div>
 
-          {/* 2. Precio Entrada Planificado */}
+          {/* 2. Mini Sparkline Chart (Últimos 15 min con Recharts) */}
+          <div className="p-1">
+            <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
+              Tendencia (15m)
+            </span>
+            <MiniSparkline
+              symbol={strategy.symbol}
+              currentPrice={strategy.currentPrice}
+              isAlert={isAlert}
+            />
+          </div>
+
+          {/* 3. Precio Entrada Planificado */}
           <div>
             <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
               Entrada
@@ -172,7 +185,7 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({ strategy, rankIndex })
             </span>
           </div>
 
-          {/* 3. Distancia al Trigger (Radar Score) */}
+          {/* 4. Distancia al Trigger (Radar Score) */}
           <div>
             <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
               Distancia Radar

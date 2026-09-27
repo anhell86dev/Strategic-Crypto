@@ -1,4 +1,5 @@
 import { LiveTickerData } from '../types';
+import { klineCache } from './klineService';
 
 type TickerCallback = (ticker: LiveTickerData) => void;
 type StatusCallback = (status: 'connected' | 'connecting' | 'error' | 'idle') => void;
@@ -143,6 +144,8 @@ class BinanceStreamManager {
       direction,
       timestamp: Date.now()
     };
+
+    klineCache.updateLatestTick(symbol, price);
 
     this.tickerCallbacks.forEach(cb => cb(ticker));
   }
