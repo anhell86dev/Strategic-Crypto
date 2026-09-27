@@ -402,12 +402,14 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
 
         </div>
 
-        {/* 3. Escala de Precios Horizontal con Entrada, SL, Precio Live y Take Profits */}
+        {/* 3. Escala de Precios Horizontal con Entrada, E2, E3, SL, Precio Live y Take Profits */}
         <div className="flex-1 min-w-[300px] lg:min-w-[450px] px-2">
           <HorizontalPriceTrack
             symbol={strategy.symbol}
             type={strategy.type}
             entryPrice={strategy.entryPrice}
+            e2Price={strategy.e2Price}
+            e3Price={strategy.e3Price}
             stopLoss={strategy.stopLoss}
             currentPrice={strategy.currentPrice}
             orders={strategy.orders}

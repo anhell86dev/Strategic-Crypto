@@ -86,6 +86,8 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
     coinName,
     type,
     entryPrice,
+    e2Price,
+    e3Price,
     stopLoss,
     currentPrice,
     orders = [],
@@ -96,6 +98,16 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
   const isLong = type === 'LONG';
   const livePrice = currentPrice || entryPrice;
+  const hasE2 = e2Price !== undefined && e2Price > 0;
+  const hasE3 = e3Price !== undefined && e3Price > 0;
+
+  // Helper to calculate signed % distance from LIVE price to a target price
+  const getDeltaPct = (targetPrice?: number) => {
+    if (!targetPrice || targetPrice <= 0 || !livePrice || livePrice <= 0) return null;
+    const delta = ((targetPrice - livePrice) / livePrice) * 100;
+    const sign = delta > 0 ? '+' : '';
+    return `${sign}${delta.toFixed(2)}%`;
+  };
 
   // Toggle for MTF connectors
   const [showConnectors, setShowConnectors] = useState<boolean>(true);
@@ -161,18 +173,28 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   const dLow = dailyCandle?.low || Math.min(dOpen, dClose, livePrice * 0.955);
   const dChange = dOpen > 0 ? ((dClose - dOpen) / dOpen) * 100 : 0;
 
-  // 1. ESCALA INDEPENDIENTE PARA LA BARRA SUPERIOR DE TRADING (SL, Entrada, Live, TP1, TP2, TP3)
+  // 1. ESCALA INDEPENDIENTE PARA LA BARRA SUPERIOR DE TRADING (SL, E3, E2, E1, Live, TP1, TP2, TP3)
   const { minTradeScale, tradeScaleSpan } = useMemo(() => {
-    const min = Math.min(stopLoss, entryPrice, livePrice, tp1, tp2, tp3);
-    const max = Math.max(stopLoss, entryPrice, livePrice, tp1, tp2, tp3);
-    const padding = (max - min) * 0.04 || min * 0.02;
+    const all = [
+      stopLoss, 
+      entryPrice, 
+      ...(hasE2 && e2Price ? [e2Price] : []),
+      ...(hasE3 && e3Price ? [e3Price] : []),
+      livePrice, 
+      tp1, 
+      tp2, 
+      tp3
+    ].filter(p => p > 0);
+    const min = Math.min(...all);
+    const max = Math.max(...all);
+    const padding = (max - min) * 0.05 || min * 0.02;
     const minP = Math.max(0, min - padding);
     const maxP = max + padding;
     return {
       minTradeScale: minP,
       tradeScaleSpan: Math.max(0.000001, maxP - minP)
     };
-  }, [stopLoss, entryPrice, livePrice, tp1, tp2, tp3]);
+  }, [stopLoss, entryPrice, e2Price, e3Price, hasE2, hasE3, livePrice, tp1, tp2, tp3]);
 
   // Posiciones porcentuales para la barra superior independiente
   const getTradePercentPos = (price: number) => {
@@ -182,6 +204,8 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
   const tradeLivePos = getTradePercentPos(livePrice);
   const tradeEntryPos = getTradePercentPos(entryPrice);
+  const tradeE2Pos = hasE2 && e2Price ? getTradePercentPos(e2Price) : null;
+  const tradeE3Pos = hasE3 && e3Price ? getTradePercentPos(e3Price) : null;
   const tradeSlPos = getTradePercentPos(stopLoss);
   const tradeTp1Pos = getTradePercentPos(tp1);
   const tradeTp2Pos = getTradePercentPos(tp2);
@@ -451,27 +475,74 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
             className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
             style={{ left: `${tradeSlPos}%`, transform: 'translate(-50%, -50%)' }}
           >
-            <div className="w-4 h-4 rounded-full bg-amber-400 border-2 border-slate-950 shadow-md flex items-center justify-center text-[8px] font-bold text-slate-950">
+            <div className="w-4 h-4 rounded-full bg-rose-500 border-2 border-slate-950 shadow-md flex items-center justify-center text-[7px] font-black text-white">
               SL
             </div>
             <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-amber-300 font-bold block">{formatPrice(stopLoss)}</span>
-              <span className="text-amber-400/80 text-[9px] block">
-                {formatPrice(stopLoss)}
+              <span className="text-rose-300 font-bold block bg-slate-950/90 px-1 rounded border border-rose-900/60">
+                SL: {formatPrice(stopLoss)}
+                <span className="text-[9px] font-extrabold text-rose-400 block -mt-0.5">
+                  {getDeltaPct(stopLoss)}
+                </span>
               </span>
             </div>
           </div>
+
+          {/* Marcador E3: Piso Extremo (si existe) */}
+          {hasE3 && e3Price && tradeE3Pos !== null && (
+            <div 
+              className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+              style={{ left: `${tradeE3Pos}%`, transform: 'translate(-50%, -50%)' }}
+            >
+              <div className="w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-slate-950 shadow-md flex items-center justify-center text-[7px] font-black text-slate-950">
+                E3
+              </div>
+              <div className="absolute bottom-4 text-center whitespace-nowrap font-mono text-[10px]">
+                <span className="text-amber-300 font-bold block bg-slate-950/90 px-1 rounded border border-amber-800/60">
+                  E3: {formatPrice(e3Price)}
+                  <span className="text-[9px] font-extrabold text-amber-400 block -mt-0.5">
+                    {getDeltaPct(e3Price)}
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Marcador E2: Refuerzo DCA (si existe) */}
+          {hasE2 && e2Price && tradeE2Pos !== null && (
+            <div 
+              className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+              style={{ left: `${tradeE2Pos}%`, transform: 'translate(-50%, -50%)' }}
+            >
+              <div className="w-3.5 h-3.5 rounded-full bg-sky-400 border-2 border-slate-950 shadow-md flex items-center justify-center text-[7px] font-black text-slate-950">
+                E2
+              </div>
+              <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
+                <span className="text-sky-300 font-bold block bg-slate-950/90 px-1 rounded border border-sky-800/60">
+                  E2: {formatPrice(e2Price)}
+                  <span className="text-[9px] font-extrabold text-sky-400 block -mt-0.5">
+                    {getDeltaPct(e2Price)}
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Marcador 2: Entrada (E1) */}
           <div 
             className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
             style={{ left: `${tradeEntryPos}%`, transform: 'translate(-50%, -50%)' }}
           >
-            <div className="w-4 h-4 rounded-full bg-cyan-400 ring-4 ring-cyan-500/20 border-2 border-slate-950 shadow-md flex items-center justify-center text-[8px] font-bold text-slate-950">
+            <div className="w-4 h-4 rounded-full bg-cyan-400 ring-4 ring-cyan-500/20 border-2 border-slate-950 shadow-md flex items-center justify-center text-[7px] font-black text-slate-950">
               E1
             </div>
-            <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-cyan-300 font-bold block">ENTRADA ({formatPrice(entryPrice)})</span>
+            <div className="absolute bottom-4 text-center whitespace-nowrap font-mono text-[10px]">
+              <span className="text-cyan-300 font-bold block bg-slate-950/90 px-1 rounded border border-cyan-700/80">
+                E1: {formatPrice(entryPrice)}
+                <span className="text-[9px] font-extrabold text-cyan-400 block -mt-0.5">
+                  {getDeltaPct(entryPrice)}
+                </span>
+              </span>
             </div>
           </div>
 
@@ -480,7 +551,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
             className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none z-30 transition-all duration-300"
             style={{ left: `${tradeLivePos}%`, transform: 'translateX(-50%)' }}
           >
-            <span className="bg-cyan-500 text-slate-950 font-mono text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-lg shadow-cyan-500/40 -translate-y-2">
+            <span className="bg-cyan-400 text-slate-950 font-mono text-[10px] font-black px-1.5 py-0.5 rounded shadow-lg shadow-cyan-500/40 -translate-y-2">
               {formatPrice(livePrice)}
             </span>
             <div className="w-0.5 flex-1 bg-cyan-400 shadow-[0_0_8px_#38bdf8]" />
@@ -496,7 +567,12 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           >
             <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
             <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-emerald-300 font-bold block">TP1 {formatPrice(tp1)}</span>
+              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60">
+                TP1: {formatPrice(tp1)}
+                <span className="text-[9px] font-extrabold text-emerald-400 block -mt-0.5">
+                  {getDeltaPct(tp1)}
+                </span>
+              </span>
             </div>
           </div>
 
@@ -505,8 +581,13 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
             style={{ left: `${tradeTp2Pos}%`, transform: 'translate(-50%, -50%)' }}
           >
             <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
-            <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-emerald-300 font-bold block">TP2 {formatPrice(tp2)}</span>
+            <div className="absolute bottom-4 text-center whitespace-nowrap font-mono text-[10px]">
+              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60">
+                TP2: {formatPrice(tp2)}
+                <span className="text-[9px] font-extrabold text-emerald-400 block -mt-0.5">
+                  {getDeltaPct(tp2)}
+                </span>
+              </span>
             </div>
           </div>
 
@@ -516,7 +597,12 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           >
             <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
             <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-emerald-300 font-bold block">TP3 {formatPrice(tp3)}</span>
+              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60">
+                TP3: {formatPrice(tp3)}
+                <span className="text-[9px] font-extrabold text-emerald-400 block -mt-0.5">
+                  {getDeltaPct(tp3)}
+                </span>
+              </span>
             </div>
           </div>
 
