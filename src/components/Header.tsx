@@ -8,8 +8,7 @@ import {
   Plus, 
   Activity,
   CheckCircle2, 
-  AlertCircle,
-  Key
+  AlertCircle
 } from 'lucide-react';
 import { DensityToggle } from './DensityToggle';
 import { ConnectionStatus } from '../types';
@@ -26,9 +25,6 @@ interface HeaderProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
   tickCount: number;
-  activeTab: 'radar' | 'binance';
-  onTabChange: (tab: 'radar' | 'binance') => void;
-  onOpenGateway?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -42,9 +38,6 @@ export const Header: React.FC<HeaderProps> = ({
   soundEnabled,
   onToggleSound,
   tickCount,
-  activeTab,
-  onTabChange,
-  onOpenGateway,
 }) => {
   const formatTime = (d: Date | null) => {
     if (!d) return '--:--:--';
@@ -118,8 +111,8 @@ export const Header: React.FC<HeaderProps> = ({
 
             <span className="text-slate-700 font-bold" aria-hidden="true">|</span>
 
-            {/* Binance Live Stream Status */}
-            <div className="flex items-center gap-2" title={`Binance WebSockets (${tickCount.toLocaleString()} ticks recibidos)`}>
+            {/* Binance Live Market Feed Status */}
+            <div className="flex items-center gap-2" title={`Cotizaciones en tiempo real Binance (${tickCount.toLocaleString()} ticks recibidos)`}>
               <span className="relative flex h-2.5 w-2.5">
                 {binanceStatus === 'connected' && (
                   <span className="animate-ping-fast absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -128,7 +121,7 @@ export const Header: React.FC<HeaderProps> = ({
                   binanceStatus === 'connected' ? 'bg-emerald-500' : binanceStatus === 'connecting' ? 'bg-amber-500' : 'bg-rose-500'
                 }`} />
               </span>
-              <span className="text-slate-400 hidden sm:inline">Binance:</span>
+              <span className="text-slate-400 hidden sm:inline">Precios:</span>
               <span className={`font-bold ${getStatusColor(binanceStatus)}`}>
                 {binanceStatus === 'connected' ? 'Live WSS' : getStatusLabel(binanceStatus)}
               </span>
@@ -185,59 +178,12 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Settings / Sheets Config */}
           <button
             onClick={onOpenSettings}
-            title="Configuración de Google Sheets y Binance"
+            title="Configuración de Google Sheets"
             className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
           >
             <Settings className="w-5 h-5" />
           </button>
-
-          {/* Binance Gateway / Connection Portal */}
-          {onOpenGateway && (
-            <button
-              onClick={onOpenGateway}
-              title="Portal de Conexión de Binance API"
-              className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
-            >
-              <Key className="w-5 h-5" />
-            </button>
-          )}
         </div>
-      </div>
-
-      {/* Primary Navigation Tabs: Radar vs Binance */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 bg-slate-950/90 border-t border-slate-800/60 flex items-center justify-between">
-        <nav className="flex items-center gap-2 py-2">
-          <button
-            onClick={() => onTabChange('radar')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-bold transition-all cursor-pointer ${
-              activeTab === 'radar'
-                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <Radio className="w-4 h-4" />
-            <span>Radar de Estrategias</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('binance')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-mono font-bold transition-all cursor-pointer ${
-              activeTab === 'binance'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <span className="text-base leading-none">⚡</span>
-            <span>Binance</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
-              activeTab === 'binance' 
-                ? 'bg-amber-950 text-amber-300' 
-                : 'bg-slate-800 text-amber-400'
-            }`}>
-              Futuros USD-M
-            </span>
-          </button>
-        </nav>
       </div>
     </header>
   );

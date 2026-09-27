@@ -26,8 +26,6 @@ import { INITIAL_STRATEGIES, INITIAL_ORDERS } from './data/initialStrategies';
 import { TradeLogService } from './services/tradeLogService';
 import { proxyService } from './services/proxyService';
 import { TradeLogEntry } from './types';
-import { BinanceFuturesTab } from './components/BinanceFuturesTab';
-import { BinanceGatewayScreen } from './components/BinanceGatewayScreen';
 import { TopGreenOpportunities } from './components/TopGreenOpportunities';
 import { StrategyAnalyzerService } from './services/strategyAnalyzerService';
 
@@ -62,12 +60,6 @@ export default function App() {
 
   // Trade History Log State
   const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>(() => TradeLogService.getLogs());
-
-  // Primary Navigation Tab (Radar vs Binance)
-  const [activeMainTab, setActiveMainTab] = useState<'radar' | 'binance'>('radar');
-
-  // Welcome Screen / Binance Gateway state (shows first before strategies)
-  const [showGateway, setShowGateway] = useState<boolean>(true);
 
   // Initial Sync from Google Sheets / Storage
   const loadStrategiesData = useCallback(async (cfg: SheetsConfig) => {
@@ -464,21 +456,6 @@ export default function App() {
 
   const isFiltered = searchQuery !== '' || activeFilters.length > 0;
 
-  if (showGateway) {
-    return (
-      <BinanceGatewayScreen 
-        onEnterApp={(options) => {
-          setShowGateway(false);
-          if (options?.startInBinance) {
-            setActiveMainTab('binance');
-          } else {
-            setActiveMainTab('radar');
-          }
-        }} 
-      />
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200 font-sans">
       
@@ -494,46 +471,39 @@ export default function App() {
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
         tickCount={tickCount}
-        activeTab={activeMainTab}
-        onTabChange={setActiveMainTab}
-        onOpenGateway={() => setShowGateway(true)}
       />
 
       {/* 2. Main Body Container */}
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-5">
-        {activeMainTab === 'binance' ? (
-          <BinanceFuturesTab onSwitchToStrategies={() => setActiveMainTab('radar')} />
-        ) : (
-          <>
-            {/* Leyenda Informativa */}
-            <LegendBanner alertCount={alertCount} />
+        {/* Leyenda Informativa */}
+        <LegendBanner alertCount={alertCount} />
 
-            {/* Overview KPI Stats Bar */}
-            <RadarStatsBar strategies={sortedAndFilteredStrategies} />
+        {/* Overview KPI Stats Bar */}
+        <RadarStatsBar strategies={sortedAndFilteredStrategies} />
 
-            {/* Top 5 Oportunidades: Semáforo Verde (En Zona & Mejor R:B) */}
-            <TopGreenOpportunities
-              topStrategies={topGreenStrategies}
-              onSelectStrategy={(strat) => {
-                setSearchQuery(strat.symbol);
-              }}
-              onFilterGreen={() => {
-                const isGreenActive = activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE');
-                if (isGreenActive) {
-                  const rule = activeFilters.find(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE');
-                  if (rule) handleRemoveFilter(rule.id);
-                } else {
-                  handleAddFilter({
-                    id: 'preset-traffic-verde',
-                    type: 'TRAFFIC_LIGHT',
-                    label: 'Semáforo',
-                    displayValue: '🟢 Verde (En Zona)',
-                    value: 'VERDE'
-                  });
-                }
-              }}
-              isGreenFilterActive={activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE')}
-            />
+        {/* Top 5 Oportunidades: Semáforo Verde (En Zona & Mejor R:B) */}
+        <TopGreenOpportunities
+          topStrategies={topGreenStrategies}
+          onSelectStrategy={(strat) => {
+            setSearchQuery(strat.symbol);
+          }}
+          onFilterGreen={() => {
+            const isGreenActive = activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE');
+            if (isGreenActive) {
+              const rule = activeFilters.find(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE');
+              if (rule) handleRemoveFilter(rule.id);
+            } else {
+              handleAddFilter({
+                id: 'preset-traffic-verde',
+                type: 'TRAFFIC_LIGHT',
+                label: 'Semáforo',
+                displayValue: '🟢 Verde (En Zona)',
+                value: 'VERDE'
+              });
+            }
+          }}
+          isGreenFilterActive={activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE')}
+        />
 
             {/* Dynamic Composable Filter Bar */}
             <DynamicFilterBar
@@ -574,8 +544,6 @@ export default function App() {
               onSimulateFill={handleSimulateFill}
               availableStrategies={sortedAndFilteredStrategies}
             />
-          </>
-        )}
       </main>
 
       {/* 3. Modals */}
