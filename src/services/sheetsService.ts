@@ -1,10 +1,10 @@
-import { Strategy, TakeProfitOrder, SheetsConfig } from '../types';
+import { Strategy, TakeProfitOrder, SheetsConfig, DcaLevel } from '../types';
 import { INITIAL_STRATEGIES, INITIAL_ORDERS } from '../data/initialStrategies';
 import { proxyService, DEFAULT_PROXY_SERVER_URL } from './proxyService';
 
 const STORAGE_KEY_CONFIG = 'crypto_radar_sheets_config';
-const STORAGE_KEY_CUSTOM_STRATEGIES = 'crypto_radar_custom_strategies_v2';
-const STORAGE_KEY_CUSTOM_ORDERS = 'crypto_radar_custom_orders_v2';
+const STORAGE_KEY_CUSTOM_STRATEGIES = 'crypto_radar_custom_strategies_v4';
+const STORAGE_KEY_CUSTOM_ORDERS = 'crypto_radar_custom_orders_v4';
 
 export const DEFAULT_SHEETS_CONFIG: SheetsConfig = {
   spreadsheetId: '1jwRLOHKGUlHSPcAF401LKtDtSW5erFwZvxYkSJm-2mE',
@@ -15,33 +15,14 @@ export const DEFAULT_SHEETS_CONFIG: SheetsConfig = {
   proxyUrl: DEFAULT_PROXY_SERVER_URL,
 };
 
-// Sheet name candidates to try when fetching from Google Sheets (prioritizing Ordenes)
+// Sheet name candidates prioritizing 'Ordenes'
 const SHEET_NAME_CANDIDATES = [
   'Ordenes',
   'Órdenes',
   'Orders',
-  'Estrategia',
   'Estrategias',
-  'Trades',
-  'TakeProfits',
-  'TPs',
   'Sheet1',
-  'Hoja 1',
-  'Hoja1',
-  'Crypto',
-  'Radar',
-  'Estrategias_74'
-];
-
-const ORDERS_SHEET_CANDIDATES = [
-  'Ordenes',
-  'Órdenes',
-  'Orders',
-  'TakeProfits',
-  'TPs',
-  'Sheet2',
-  'Hoja 2',
-  'Hoja2'
+  'Hoja 1'
 ];
 
 export class SheetsService {
@@ -74,8 +55,7 @@ export class SheetsService {
       const ordData = localStorage.getItem(STORAGE_KEY_CUSTOM_ORDERS);
       if (strData) {
         const parsedStr = JSON.parse(strData);
-        if (Array.isArray(parsedStr) && parsedStr.length > 0) {
-          // Check that strategies have valid strategyName and entryPrice
+        if (Array.isArray(parsedStr) && parsedStr.length >= 70) {
           const hasValidData = parsedStr.some(s => s.strategyName && s.entryPrice > 0);
           if (hasValidData) {
             return {
@@ -101,7 +81,7 @@ export class SheetsService {
   }
 
   /**
-   * Fetches strategies & orders from Google Sheets REST API, Google Apps Script Proxy, or GViz/CSV
+   * Fetches strategies & orders from Google Sheets GViz CSV export, REST API, or proxy.
    */
   public static async fetchFromGoogleSheets(config: SheetsConfig): Promise<{
     strategies: Strategy[];
@@ -116,59 +96,46 @@ export class SheetsService {
 
     const timestamp = new Date();
 
-    // METHOD 1: Try Google Apps Script Proxy endpoint (if available)
-    const effectiveProxy = (proxyUrl || DEFAULT_PROXY_SERVER_URL).trim();
-    if (effectiveProxy) {
-      try {
-        const sep = effectiveProxy.includes('?') ? '&' : '?';
-        const proxyFetchUrl = `${effectiveProxy}${sep}action=getData&spreadsheetId=${encodeURIComponent(spreadsheetId)}&sheet=Ordenes&t=${Date.now()}`;
-        
-        const proxyRes = await fetch(proxyFetchUrl, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json, text/plain, */*' }
-        });
+    // METHOD 1: Direct Google Sheets GViz CSV Export (tab Ordenes)
+    if (spreadsheetId) {
+      const csvUrlsToTry = [
+        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Ordenes')}&t=${Date.now()}`,
+        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Órdenes')}&t=${Date.now()}`,
+        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=0&t=${Date.now()}`
+      ];
 
-        if (proxyRes.ok) {
-          const json = await proxyRes.json();
-          if (json && (json.strategies || json.data || Array.isArray(json))) {
-            const rawStratList = json.strategies || json.data || (Array.isArray(json) ? json : []);
-            const rawOrdersList = json.orders || [];
+      for (const csvUrl of csvUrlsToTry) {
+        try {
+          const csvRes = await fetch(csvUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'text/csv, text/plain, */*' }
+          });
 
-            let parsedStrategies: Strategy[] = [];
-            let parsedOrders: TakeProfitOrder[] = [];
-
-            if (rawStratList.length > 0) {
-              if (Array.isArray(rawStratList[0])) {
-                const res = this.parseStrategiesSheetRows(rawStratList);
-                parsedStrategies = res.strategies;
-                parsedOrders = res.orders;
-              } else if (typeof rawStratList[0] === 'object') {
-                parsedStrategies = this.normalizeObjectStrategies(rawStratList);
+          if (csvRes.ok) {
+            const csvText = await csvRes.text();
+            if (csvText && !csvText.includes('<!DOCTYPE html>') && csvText.trim().length > 100) {
+              const rows = this.parseCsvToRows(csvText);
+              if (rows.length > 1) {
+                const parsedResult = this.parseStrategiesSheetRows(rows);
+                if (parsedResult.strategies.length >= 70) {
+                  this.saveCustomData(parsedResult.strategies, parsedResult.orders);
+                  return {
+                    strategies: parsedResult.strategies,
+                    orders: parsedResult.orders,
+                    source: 'google_sheets_csv',
+                    timestamp
+                  };
+                }
               }
             }
-
-            if (rawOrdersList.length > 0 && Array.isArray(rawOrdersList[0])) {
-              const extraOrders = this.parseOrdersSheetRows(rawOrdersList);
-              parsedOrders = [...parsedOrders, ...extraOrders];
-            }
-
-            if (parsedStrategies.length > 0) {
-              this.saveCustomData(parsedStrategies, parsedOrders);
-              return {
-                strategies: parsedStrategies,
-                orders: parsedOrders,
-                source: 'google_apps_script_proxy',
-                timestamp
-              };
-            }
           }
+        } catch {
+          // Continue to next candidate
         }
-      } catch (err) {
-        console.warn('Apps Script Proxy data fetch failed, continuing to Sheets API...', err);
       }
     }
 
-    // METHOD 2: Try Google Sheets v4 REST API (if apiKey is present)
+    // METHOD 2: Google Sheets v4 REST API (if apiKey is configured)
     if (spreadsheetId && effectiveApiKey) {
       for (const sheetName of SHEET_NAME_CANDIDATES) {
         try {
@@ -182,32 +149,11 @@ export class SheetsService {
             
             if (values.length > 1) {
               const parsedResult = this.parseStrategiesSheetRows(values);
-              let parsedOrders = parsedResult.orders;
-
-              // Also try fetching separate Orders sheet if needed
-              for (const ordSheet of ORDERS_SHEET_CANDIDATES) {
-                if (ordSheet.toLowerCase() === sheetName.toLowerCase()) continue;
-                try {
-                  const ordUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(ordSheet)}?key=${effectiveApiKey}&t=${cacheBuster}`;
-                  const ordRes = await fetch(ordUrl);
-                  if (ordRes.ok) {
-                    const ordJson = await ordRes.json();
-                    const extraOrders = this.parseOrdersSheetRows(ordJson.values || []);
-                    if (extraOrders.length > 0) {
-                      parsedOrders = [...parsedOrders, ...extraOrders];
-                      break;
-                    }
-                  }
-                } catch {
-                  // Ignore and continue
-                }
-              }
-
               if (parsedResult.strategies.length > 0) {
-                this.saveCustomData(parsedResult.strategies, parsedOrders);
+                this.saveCustomData(parsedResult.strategies, parsedResult.orders);
                 return {
                   strategies: parsedResult.strategies,
-                  orders: parsedOrders,
+                  orders: parsedResult.orders,
                   source: 'google_sheets_api',
                   timestamp
                 };
@@ -220,44 +166,7 @@ export class SheetsService {
       }
     }
 
-    // METHOD 3: Try Public Google Sheets CSV / GViz Export
-    if (spreadsheetId) {
-      const csvUrlsToTry = [
-        ...SHEET_NAME_CANDIDATES.map(name => `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}&t=${Date.now()}`),
-        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=0&t=${Date.now()}`,
-        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=0&t=${Date.now()}`
-      ];
-
-      for (const csvUrl of csvUrlsToTry) {
-        try {
-          const csvRes = await fetch(csvUrl);
-          if (csvRes.ok) {
-            const csvText = await csvRes.text();
-            if (csvText && !csvText.includes('<!DOCTYPE html>') && csvText.trim().length > 20) {
-              const rows = this.parseCsvToRows(csvText);
-              if (rows.length > 1) {
-                const parsedResult = this.parseStrategiesSheetRows(rows);
-                let parsedOrders = parsedResult.orders;
-
-                if (parsedResult.strategies.length > 0) {
-                  this.saveCustomData(parsedResult.strategies, parsedOrders);
-                  return {
-                    strategies: parsedResult.strategies,
-                    orders: parsedOrders,
-                    source: 'google_sheets_csv',
-                    timestamp
-                  };
-                }
-              }
-            }
-          }
-        } catch (csvErr) {
-          // Continue to next candidate
-        }
-      }
-    }
-
-    // METHOD 4: Fallback to Local Stored or Default Preset Strategies
+    // METHOD 3: Fallback to stored or initial strategies
     const stored = this.getStoredCustomData();
     return {
       strategies: stored.strategies.length > 0 ? stored.strategies : INITIAL_STRATEGIES,
@@ -267,47 +176,105 @@ export class SheetsService {
     };
   }
 
+  /**
+   * RFC 4180 compliant CSV parser.
+   * Correctly handles quoted fields that contain newlines, commas, and escaped double quotes.
+   */
   public static parseCsvToRows(csvText: string): string[][] {
-    const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
-    return lines.map(line => {
-      const row: string[] = [];
-      let inQuotes = false;
-      let currentToken = '';
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let cell = '';
+    let inQuotes = false;
 
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-          row.push(currentToken.replace(/^"|"$/g, '').trim());
-          currentToken = '';
+    for (let i = 0; i < csvText.length; i++) {
+      const char = csvText[i];
+      const nextChar = csvText[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          cell += '"';
+          i++; // Skip the next quote
         } else {
-          currentToken += char;
+          inQuotes = !inQuotes;
         }
+      } else if (char === ',' && !inQuotes) {
+        row.push(cell.trim());
+        cell = '';
+      } else if ((char === '\r' || char === '\n') && !inQuotes) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        row.push(cell.trim());
+        if (row.some(val => val.length > 0)) {
+          rows.push(row);
+        }
+        row = [];
+        cell = '';
+      } else {
+        cell += char;
       }
-      row.push(currentToken.replace(/^"|"$/g, '').trim());
-      return row;
-    });
+    }
+
+    if (cell.length > 0 || row.length > 0) {
+      row.push(cell.trim());
+      if (row.some(val => val.length > 0)) {
+        rows.push(row);
+      }
+    }
+
+    return rows;
+  }
+
+  private static parseNum(val: any): number | undefined {
+    if (val === undefined || val === null) return undefined;
+    const clean = val.toString().replace(/,/g, '').replace(/\$/g, '').replace(/%/g, '').replace(/x/i, '').trim();
+    if (!clean) return undefined;
+    const num = parseFloat(clean);
+    return isNaN(num) ? undefined : num;
   }
 
   /**
-   * Intelligently parses spreadsheet rows with dedicated mapping for the 'Ordenes' sheet structure:
-   * Col A (0): Nombre Estrategia (e.g. AERO_PULLBACK_26-09-26_18:09)
-   * Col B (1): Fecha / Hora
-   * Col C (2): Activo (e.g. AERO, SOL, BTC, AVAX)
-   * Col D (3): Capital Asignado
-   * Col E (4): Mercado
-   * Col F (5): Margen
-   * Col G (6): Apalancamiento (e.g. 5)
-   * Col H (7): Valor Nominal
-   * Col I (8): Tipo (e.g. Long / Short)
-   * Col J (9): Estrategia (e.g. Rebote en soporte, Rango)
-   * Col K (10): Entrada / Precio Entrada
-   * Col L (11): Stop Loss / SL
-   * Col M (12): TP1
-   * Col N (13): TP2
-   * Col O (14): TP3
-   * Col P (15): TP4
+   * Parses rows according to the official Ordenes dictionary:
+   * Col 0: Nombre Estrategia
+   * Col 1: Fecha / Hora (GMT-6)
+   * Col 2: Activo
+   * Col 3: Capital Asignado
+   * Col 4: Mercado
+   * Col 5: Margen
+   * Col 6: Apalancamiento
+   * Col 7: Valor Nominal
+   * Col 8: Tipo
+   * Col 9: Estrategia
+   * Col 10: Escenario Principal
+   * Col 11: E1
+   * Col 12: % E1
+   * Col 13: Cantidad Unidades E1
+   * Col 14: E2
+   * Col 15: % E2
+   * Col 16: Cantidad Unidades E2
+   * Col 17: E3
+   * Col 18: % E3
+   * Col 19: Cantidad Unidades E3
+   * Col 20: Precio Promedio E1
+   * Col 21: Precio Promedio E2
+   * Col 22: Precio Promedio E3
+   * Col 23: Stop-Loss
+   * Col 24: Stop-Loss %
+   * Col 25: Loss Capa 1
+   * Col 26: Loss Capa 2
+   * Col 27: Loss Capa 3
+   * Col 28: TP1
+   * Col 29: % TP1
+   * Col 30: Profit Capa 1
+   * Col 31: TP2
+   * Col 32: % TP2
+   * Col 33: Profit Capa 2
+   * Col 34: TP3
+   * Col 35: % TP3
+   * Col 36: Profit Capa 3
+   * Col 37: Reglas de Ejecución Táctica
+   * Col 38: Disciplina del Trade
+   * Col 39: Estado
    */
   public static parseStrategiesSheetRows(rows: string[][]): {
     strategies: Strategy[];
@@ -315,65 +282,94 @@ export class SheetsService {
   } {
     if (!rows || rows.length <= 1) return { strategies: [], orders: [] };
 
+    // Inspect headers to find any offset
     const headerRow = rows[0].map(h => (h || '').toString().toLowerCase().trim());
-    
-    // Find column positions dynamically
-    let stratNameCol = -1;
-    let idCol = -1;
-    let symbolCol = -1;
-    let typeCol = -1;
-    let entryCol = -1;
-    let slCol = -1;
-    let dateCol = -1;
-    let statusCol = -1;
-    let categoryCol = -1;
-    let notesCol = -1;
-    let leverageCol = -1;
-    let thresholdCol = -1;
 
-    // Track horizontal TP columns (e.g. TP1, TP2, TP3, TP4)
-    const tpCols: { type: string; colIndex: number }[] = [];
+    // Locate base columns
+    let colName = 0;
+    let colDate = 1;
+    let colAsset = 2;
+    let colCapital = 3;
+    let colMarket = 4;
+    let colMargin = 5;
+    let colLev = 6;
+    let colNominal = 7;
+    let colType = 8;
+    let colStrategy = 9;
+    let colScenario = 10;
+    let colE1 = 11;
+    let colE1Pct = 12;
+    let colE1Units = 13;
+    let colE2 = 14;
+    let colE2Pct = 15;
+    let colE2Units = 16;
+    let colE3 = 17;
+    let colE3Pct = 18;
+    let colE3Units = 19;
+    let colAvgE1 = 20;
+    let colAvgE2 = 21;
+    let colAvgE3 = 22;
+    let colSL = 23;
+    let colSLPct = 24;
+    let colLoss1 = 25;
+    let colLoss2 = 26;
+    let colLoss3 = 27;
+    let colTP1 = 28;
+    let colTP1Pct = 29;
+    let colProfit1 = 30;
+    let colTP2 = 31;
+    let colTP2Pct = 32;
+    let colProfit2 = 33;
+    let colTP3 = 34;
+    let colTP3Pct = 35;
+    let colProfit3 = 36;
+    let colTactical = 37;
+    let colDiscipline = 38;
+    let colStatus = 39;
 
+    // Dynamic header check
     headerRow.forEach((h, idx) => {
-      if (/nombre.*estrategia|^nombre$|^name$/i.test(h)) stratNameCol = idx;
-      else if (/^id$|^#$|^n[uú]m|^c[oó]digo/i.test(h)) idCol = idx;
-      else if (/^activo$|s[ií]mbol|symbol|ticker|moneda|asset|pair|par/i.test(h) && symbolCol === -1) symbolCol = idx;
-      else if (/^tipo$|type|dir|direcci[oó]n|side|posici[oó]n/i.test(h) && typeCol === -1) typeCol = idx;
-      else if (/entrad|entry|precio.*entrad|buy.*price|precio\s*compra|precio.*l[ií]mite/i.test(h) && entryCol === -1) entryCol = idx;
-      else if (/stop.*loss|^sl$|invalida|stop/i.test(h) && slCol === -1) slCol = idx;
-      else if (/fecha|date|timestamp/i.test(h) && dateCol === -1) dateCol = idx;
-      else if (/estado|status/i.test(h) && statusCol === -1) statusCol = idx;
-      else if (/estrategia$|categor[ií]a|sector/i.test(h) && categoryCol === -1) categoryCol = idx;
-      else if (/nota|notes|tesis|comentario|descripci[oó]n/i.test(h) && notesCol === -1) notesCol = idx;
-      else if (/apalancamiento|leverage|lev/i.test(h) && leverageCol === -1) leverageCol = idx;
-      else if (/umbral|threshold|alerta/i.test(h) && thresholdCol === -1) thresholdCol = idx;
-      
-      // Horizontal TP columns
-      const tpMatch = h.match(/tp\s*([0-9]+)|take\s*profit\s*([0-9]+)|target\s*([0-9]+)/i);
-      if (tpMatch) {
-        const num = tpMatch[1] || tpMatch[2] || tpMatch[3] || `${tpCols.length + 1}`;
-        tpCols.push({ type: `TP${num}`, colIndex: idx });
-      }
+      if (/nombre.*estrategia/i.test(h)) colName = idx;
+      else if (/fecha/i.test(h)) colDate = idx;
+      else if (/^activo$/i.test(h)) colAsset = idx;
+      else if (/capital.*asignado/i.test(h)) colCapital = idx;
+      else if (/^mercado$/i.test(h)) colMarket = idx;
+      else if (/^margen$/i.test(h)) colMargin = idx;
+      else if (/apalancamiento/i.test(h)) colLev = idx;
+      else if (/valor.*nominal/i.test(h)) colNominal = idx;
+      else if (/^tipo$/i.test(h)) colType = idx;
+      else if (/^estrategia$/i.test(h)) colStrategy = idx;
+      else if (/escenario.*principal/i.test(h)) colScenario = idx;
+      else if (/^e1$/i.test(h)) colE1 = idx;
+      else if (/%\s*e1/i.test(h)) colE1Pct = idx;
+      else if (/unidades.*e1/i.test(h)) colE1Units = idx;
+      else if (/^e2$/i.test(h)) colE2 = idx;
+      else if (/%\s*e2/i.test(h)) colE2Pct = idx;
+      else if (/unidades.*e2/i.test(h)) colE2Units = idx;
+      else if (/^e3$/i.test(h)) colE3 = idx;
+      else if (/%\s*e3/i.test(h)) colE3Pct = idx;
+      else if (/unidades.*e3/i.test(h)) colE3Units = idx;
+      else if (/promedio.*e1/i.test(h)) colAvgE1 = idx;
+      else if (/promedio.*e2/i.test(h)) colAvgE2 = idx;
+      else if (/promedio.*e3/i.test(h)) colAvgE3 = idx;
+      else if (/stop.*loss/i.test(h) && !h.includes('%')) colSL = idx;
+      else if (/stop.*loss.*%/i.test(h)) colSLPct = idx;
+      else if (/loss.*capa.*1/i.test(h)) colLoss1 = idx;
+      else if (/loss.*capa.*2/i.test(h)) colLoss2 = idx;
+      else if (/loss.*capa.*3/i.test(h)) colLoss3 = idx;
+      else if (/^tp1$/i.test(h)) colTP1 = idx;
+      else if (/%\s*tp1/i.test(h)) colTP1Pct = idx;
+      else if (/profit.*capa.*1/i.test(h)) colProfit1 = idx;
+      else if (/^tp2$/i.test(h)) colTP2 = idx;
+      else if (/%\s*tp2/i.test(h)) colTP2Pct = idx;
+      else if (/profit.*capa.*2/i.test(h)) colProfit2 = idx;
+      else if (/^tp3$/i.test(h)) colTP3 = idx;
+      else if (/%\s*tp3/i.test(h)) colTP3Pct = idx;
+      else if (/profit.*capa.*3/i.test(h)) colProfit3 = idx;
+      else if (/reglas.*ejecuci[oó]n/i.test(h)) colTactical = idx;
+      else if (/disciplina/i.test(h)) colDiscipline = idx;
+      else if (/^estado$/i.test(h)) colStatus = idx;
     });
-
-    // Fallbacks matched strictly to the Ordenes sheet structure
-    if (stratNameCol === -1) stratNameCol = 0; // Col A is 'Nombre Estrategia'
-    if (symbolCol === -1) symbolCol = 2; // Col C is 'Activo'
-    if (dateCol === -1) dateCol = 1; // Col B is 'Fecha / Hora'
-    if (leverageCol === -1) leverageCol = 6; // Col G is 'Apalancamiento'
-    if (typeCol === -1) typeCol = 8; // Col I is 'Tipo'
-    if (categoryCol === -1) categoryCol = 9; // Col J is 'Estrategia' (Rebote, Rango, etc.)
-    if (entryCol === -1) entryCol = 10; // Col K is 'Entrada'
-    if (slCol === -1) slCol = 11; // Col L is 'Stop Loss'
-
-    // If no TP columns matched via headers, assign default TP columns (Cols M, N, O, P)
-    if (tpCols.length === 0) {
-      tpCols.push(
-        { type: 'TP1', colIndex: 12 },
-        { type: 'TP2', colIndex: 13 },
-        { type: 'TP3', colIndex: 14 }
-      );
-    }
 
     const dataRows = rows.slice(1);
     const strategies: Strategy[] = [];
@@ -382,177 +378,178 @@ export class SheetsService {
     dataRows.forEach((row, index) => {
       if (!row || row.length < 2) return;
 
-      // 1. Extract Strategy Name (Exact text from Column A)
-      const rawStratName = (row[stratNameCol] || row[0] || '').toString().trim();
-      if (!rawStratName && (!row[symbolCol] || row[symbolCol].trim() === '')) return;
+      const stratName = (row[colName] || row[0] || '').toString().trim();
+      let rawAsset = (row[colAsset] || '').toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-      // 2. Extract Active Symbol (e.g. AERO, SOL, BTC, AVAX)
-      let rawSymbol = (row[symbolCol] || '').toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-      
-      // If symbol is empty, try to extract ticker from strategy name (e.g. AERO_PULLBACK -> AERO)
-      if (!rawSymbol && rawStratName) {
-        const parts = rawStratName.split('_');
+      if (!rawAsset && stratName) {
+        const parts = stratName.split('_');
         if (parts.length > 0 && parts[0].length >= 2) {
-          rawSymbol = parts[0].toUpperCase().replace(/[^A-Z0-9]/g, '');
+          rawAsset = parts[0].toUpperCase().replace(/[^A-Z0-9]/g, '');
         }
       }
 
-      if (!rawSymbol || rawSymbol.length < 2) return;
+      if (!stratName && !rawAsset) return;
+      if (stratName.toLowerCase().includes('nombre estrategia') || rawAsset === 'ACTIVO') return;
 
-      const symbol = rawSymbol.endsWith('USDT') ? rawSymbol : `${rawSymbol}USDT`;
-      const strategyName = rawStratName.length > 0 ? rawStratName : `${symbol}_STRATEGY`;
-      const coinName = rawSymbol.replace('USDT', '');
+      const symbol = rawAsset.endsWith('USDT') ? rawAsset : `${rawAsset}USDT`;
+      const id = index + 1;
+      const rawType = (row[colType] || 'Long').toString().toUpperCase();
+      const type: 'LONG' | 'SHORT' = rawType.includes('SHORT') ? 'SHORT' : 'LONG';
 
-      const rawId = (idCol !== -1 && row[idCol]) ? parseInt(row[idCol]) : (index + 1);
-      const stratId = !isNaN(rawId) && rawId > 0 ? rawId : (index + 1);
+      const capitalAssigned = this.parseNum(row[colCapital]) || 5;
+      const market = (row[colMarket] || 'Binance Futuros').toString().trim();
+      const marginType = (row[colMargin] || 'Aislado (Isolated)').toString().trim();
+      const leverage = this.parseNum(row[colLev]) || 5;
+      const nominalValue = this.parseNum(row[colNominal]) || (capitalAssigned * leverage);
 
-      // 3. Direction (LONG / SHORT)
-      const rawType = (row[typeCol] || 'LONG').toString().trim().toUpperCase();
-      const type: 'LONG' | 'SHORT' = (rawType.includes('SHORT') || rawType === 'S' || rawType.includes('VENTA') || rawType.includes('SELL')) ? 'SHORT' : 'LONG';
+      const category = (row[colStrategy] || 'Estrategia').toString().trim();
+      const scenarioNotes = (row[colScenario] || '').toString().trim();
 
-      // 4. Entry Price
-      let entryPrice = 0;
-      if (entryCol !== -1 && row[entryCol]) {
-        const entryStr = row[entryCol].toString().replace(/,/g, '').replace('$', '').trim();
-        entryPrice = parseFloat(entryStr);
-      }
+      const e1Price = this.parseNum(row[colE1]) || 1;
+      const e1Alloc = this.parseNum(row[colE1Pct]) || 50;
+      const e1Units = this.parseNum(row[colE1Units]);
 
-      // If entryPrice not found at entryCol, scan for numerical price in columns >= 9
-      if (isNaN(entryPrice) || entryPrice <= 0) {
-        for (let c = 9; c < row.length; c++) {
-          const val = parseFloat((row[c] || '').toString().replace(/,/g, '').replace('$', '').trim());
-          if (!isNaN(val) && val > 0) {
-            entryPrice = val;
-            break;
-          }
+      const e2Price = this.parseNum(row[colE2]);
+      const e2Alloc = this.parseNum(row[colE2Pct]);
+      const e2Units = this.parseNum(row[colE2Units]);
+
+      const e3Price = this.parseNum(row[colE3]);
+      const e3Alloc = this.parseNum(row[colE3Pct]);
+      const e3Units = this.parseNum(row[colE3Units]);
+
+      const avgPriceE1 = this.parseNum(row[colAvgE1]) || e1Price;
+      const avgPriceE2 = this.parseNum(row[colAvgE2]);
+      const avgPriceE3 = this.parseNum(row[colAvgE3]);
+
+      const stopLoss = this.parseNum(row[colSL]) || (type === 'LONG' ? e1Price * 0.95 : e1Price * 1.05);
+      const stopLossPercent = this.parseNum(row[colSLPct]);
+      const lossCapa1 = this.parseNum(row[colLoss1]);
+      const lossCapa2 = this.parseNum(row[colLoss2]);
+      const lossCapa3 = this.parseNum(row[colLoss3]);
+
+      const tacticalRules = (row[colTactical] || '').toString().trim();
+      const tradeDiscipline = (row[colDiscipline] || '').toString().trim();
+
+      const rawStatus = (row[colStatus] || 'Pendiente').toString().trim().toLowerCase();
+      let status: 'Active' | 'Pending' | 'Completed' = 'Active';
+      if (rawStatus.includes('pend')) status = 'Pending';
+      else if (rawStatus.includes('cerr') || rawStatus.includes('comp')) status = 'Completed';
+
+      const dcaLevels: DcaLevel[] = [
+        {
+          level: 'E1',
+          price: e1Price,
+          allocationPercent: e1Alloc,
+          units: e1Units,
+          averagePriceAfter: avgPriceE1,
+          label: 'Entrada Principal E1'
         }
+      ];
+
+      if (e2Price && e2Price > 0) {
+        dcaLevels.push({
+          level: 'E2',
+          price: e2Price,
+          allocationPercent: e2Alloc || 30,
+          units: e2Units,
+          averagePriceAfter: avgPriceE2,
+          label: 'Refuerzo E2'
+        });
       }
 
-      // Fallback if still invalid
-      if (isNaN(entryPrice) || entryPrice <= 0) {
-        entryPrice = 1.0;
+      if (e3Price && e3Price > 0) {
+        dcaLevels.push({
+          level: 'E3',
+          price: e3Price,
+          allocationPercent: e3Alloc || 20,
+          units: e3Units,
+          averagePriceAfter: avgPriceE3,
+          label: 'Soporte E3'
+        });
       }
-
-      // 5. Stop Loss
-      let stopLoss = 0;
-      if (slCol !== -1 && row[slCol]) {
-        const slStr = row[slCol].toString().replace(/,/g, '').replace('$', '').trim();
-        stopLoss = parseFloat(slStr);
-      }
-
-      if (isNaN(stopLoss) || stopLoss <= 0) {
-        stopLoss = type === 'LONG' ? entryPrice * 0.95 : entryPrice * 1.05;
-      }
-
-      // 6. Leverage & Metadata
-      const rawLev = (leverageCol !== -1 && row[leverageCol]) ? parseFloat(row[leverageCol].toString().replace(/x/i, '')) : 5;
-      const leverage = (!isNaN(rawLev) && rawLev > 0) ? rawLev : 5;
-
-      const date = (dateCol !== -1 && row[dateCol]) ? row[dateCol].toString().trim() : new Date().toISOString().split('T')[0];
-      const category = (categoryCol !== -1 && row[categoryCol]) ? row[categoryCol].toString().trim() : 'Estrategia';
-      const notes = (notesCol !== -1 && row[notesCol]) ? row[notesCol].toString().trim() : undefined;
 
       strategies.push({
-        id: stratId,
+        id,
         symbol,
-        coinName,
-        strategyName,
+        coinName: rawAsset,
+        strategyName: stratName.length > 0 ? stratName : `${symbol}_STRATEGY`,
+        date: (row[colDate] || '').toString().trim(),
+        capitalAssigned,
+        market,
+        marginType,
+        leverage,
+        nominalValue,
         type,
-        entryPrice,
-        stopLoss,
-        date,
-        status: 'Active',
         category,
-        notes,
-        leverage
+        scenarioNotes,
+        notes: scenarioNotes,
+        entryPrice: e1Price,
+        e1AllocationPercent: e1Alloc,
+        e1Units,
+        e2Price,
+        e2AllocationPercent: e2Alloc,
+        e2Units,
+        e3Price,
+        e3AllocationPercent: e3Alloc,
+        e3Units,
+        avgPriceE1,
+        avgPriceE2,
+        avgPriceE3,
+        dcaLevels,
+        stopLoss,
+        stopLossPercent,
+        lossCapa1,
+        lossCapa2,
+        lossCapa3,
+        tacticalRules,
+        tradeDiscipline,
+        status
       });
 
-      // 7. Take Profits extraction
-      let rowTpsFound = 0;
-      tpCols.forEach((tpCol) => {
-        if (row[tpCol.colIndex]) {
-          const rawTpStr = row[tpCol.colIndex].toString().replace(/,/g, '').replace('$', '').trim();
-          const targetPrice = parseFloat(rawTpStr);
-          if (!isNaN(targetPrice) && targetPrice > 0) {
-            rowTpsFound++;
-            orders.push({
-              strategyId: stratId,
-              type: tpCol.type,
-              targetPrice,
-              closePercentage: 33
-            });
-          }
-        }
-      });
-
-      // If no TPs in row, create proportional TPs from Entry
-      if (rowTpsFound === 0) {
-        const tp1Price = type === 'LONG' ? entryPrice * 1.03 : entryPrice * 0.97;
-        const tp2Price = type === 'LONG' ? entryPrice * 1.06 : entryPrice * 0.94;
-        const tp3Price = type === 'LONG' ? entryPrice * 1.10 : entryPrice * 0.90;
-        
-        orders.push(
-          { strategyId: stratId, type: 'TP1', targetPrice: tp1Price, closePercentage: 40 },
-          { strategyId: stratId, type: 'TP2', targetPrice: tp2Price, closePercentage: 35 },
-          { strategyId: stratId, type: 'TP3', targetPrice: tp3Price, closePercentage: 25 }
-        );
-      }
-    });
-
-    return { strategies, orders };
-  }
-
-  public static parseOrdersSheetRows(rows: string[][]): TakeProfitOrder[] {
-    if (!rows || rows.length <= 1) return [];
-
-    const dataRows = rows.slice(1);
-    const orders: TakeProfitOrder[] = [];
-
-    dataRows.forEach(row => {
-      if (!row || row.length < 3) return;
-      const strategyId = parseInt(row[0]);
-      const type = (row[1] || 'TP1').toString().trim();
-      const targetPrice = parseFloat((row[2] || '0').toString().replace(/,/g, '').replace('$', ''));
-      const closePercentage = parseFloat((row[3] || '0').toString().replace(/%/g, ''));
-
-      if (!isNaN(strategyId) && !isNaN(targetPrice) && targetPrice > 0) {
+      // TPs
+      const tp1Price = this.parseNum(row[colTP1]);
+      const tp1Pct = this.parseNum(row[colTP1Pct]) || 50;
+      const tp1Profit = this.parseNum(row[colProfit1]);
+      if (tp1Price && tp1Price > 0) {
         orders.push({
-          strategyId,
-          type,
-          targetPrice,
-          closePercentage: !isNaN(closePercentage) && closePercentage > 0 ? closePercentage : 33
+          strategyId: id,
+          type: 'TP1',
+          targetPrice: tp1Price,
+          closePercentage: tp1Pct,
+          profitUsd: tp1Profit,
+          label: 'TP1 - Mover BE'
+        });
+      }
+
+      const tp2Price = this.parseNum(row[colTP2]);
+      const tp2Pct = this.parseNum(row[colTP2Pct]) || 30;
+      const tp2Profit = this.parseNum(row[colProfit2]);
+      if (tp2Price && tp2Price > 0) {
+        orders.push({
+          strategyId: id,
+          type: 'TP2',
+          targetPrice: tp2Price,
+          closePercentage: tp2Pct,
+          profitUsd: tp2Profit,
+          label: 'TP2 - Toma Parcial'
+        });
+      }
+
+      const tp3Price = this.parseNum(row[colTP3]);
+      const tp3Pct = this.parseNum(row[colTP3Pct]) || 20;
+      const tp3Profit = this.parseNum(row[colProfit3]);
+      if (tp3Price && tp3Price > 0) {
+        orders.push({
+          strategyId: id,
+          type: 'TP3',
+          targetPrice: tp3Price,
+          closePercentage: tp3Pct,
+          profitUsd: tp3Profit,
+          label: 'TP3 - Objetivo Mayor'
         });
       }
     });
 
-    return orders;
-  }
-
-  private static normalizeObjectStrategies(rawList: any[]): Strategy[] {
-    return rawList.map((item, idx) => {
-      const id = item.id || idx + 1;
-      const strategyName = item.strategyName || item.nombreEstrategia || item.nombre || item.name || item.estrategia || `STRATEGY_${idx + 1}`;
-      const symbol = (item.symbol || item.activo || item.Symbol || item.moneda || item.coin || 'BTCUSDT').toUpperCase().trim();
-      const cleanSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
-      const type: 'LONG' | 'SHORT' = (item.type || item.tipo || item.side || 'LONG').toUpperCase().includes('SHORT') ? 'SHORT' : 'LONG';
-      const entryPrice = parseFloat(item.entryPrice || item.entrada || item.entry || item.precio || item.buyPrice || 0);
-      const stopLoss = parseFloat(item.stopLoss || item.sl || (type === 'LONG' ? entryPrice * 0.95 : entryPrice * 1.05));
-
-      return {
-        id,
-        symbol: cleanSymbol,
-        coinName: cleanSymbol.replace('USDT', ''),
-        strategyName,
-        type,
-        entryPrice: !isNaN(entryPrice) ? entryPrice : 0,
-        stopLoss: !isNaN(stopLoss) ? stopLoss : 0,
-        date: item.date || item.fecha || new Date().toISOString().split('T')[0],
-        status: item.status || item.estado || 'Active',
-        category: item.category || item.estrategia || undefined,
-        notes: item.notes || item.notas || undefined,
-        leverage: parseFloat(item.leverage || item.apalancamiento || 5) || 5,
-        customAlertThreshold: item.customAlertThreshold || undefined
-      };
-    }).filter(s => s.entryPrice > 0);
+    return { strategies, orders };
   }
 }

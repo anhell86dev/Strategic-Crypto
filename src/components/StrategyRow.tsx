@@ -189,6 +189,12 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
                   {strategy.leverage}x
                 </span>
               )}
+
+              {strategy.nominalValue && (
+                <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-800/60 text-emerald-400" title={`Capital: $${strategy.capitalAssigned || 5} × ${strategy.leverage || 5}x`}>
+                  Nominal: ${strategy.nominalValue.toFixed(0)}
+                </span>
+              )}
             </div>
           </div>
 

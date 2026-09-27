@@ -28,9 +28,9 @@ import { proxyService } from './services/proxyService';
 import { TradeLogEntry } from './types';
 
 export default function App() {
-  // Raw Data State
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [orders, setOrders] = useState<TakeProfitOrder[]>([]);
+  // Raw Data State (initialized immediately with 74+ strategies from stored custom data or presets)
+  const [strategies, setStrategies] = useState<Strategy[]>(() => SheetsService.getStoredCustomData().strategies);
+  const [orders, setOrders] = useState<TakeProfitOrder[]>(() => SheetsService.getStoredCustomData().orders);
   const [tickers, setTickers] = useState<Map<string, LiveTickerData>>(new Map());
   
   // Connection & Sync State
