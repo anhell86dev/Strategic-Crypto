@@ -259,6 +259,36 @@ app.get('/api/binance/futures/positions', async (req: Request, res: Response) =>
   }
 });
 
+// 4. GET /api/binance/klines - Public Kline Proxy (Avoids CORS / Rate limits)
+app.get('/api/binance/klines', async (req: Request, res: Response) => {
+  const symbol = ((req.query.symbol as string) || 'BTCUSDT').toUpperCase().trim();
+  const interval = (req.query.interval as string) || '1h';
+  const limit = Math.min(100, Math.max(1, parseInt((req.query.limit as string) || '5', 10)));
+
+  const hosts = [
+    'https://fapi.binance.com',
+    'https://api.binance.com',
+    'https://api1.binance.com',
+    'https://data-api.binance.vision'
+  ];
+
+  for (const host of hosts) {
+    try {
+      const endpoint = host.includes('fapi') ? '/fapi/v1/klines' : '/api/v3/klines';
+      const targetUrl = `${host}${endpoint}?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+      const response = await fetch(targetUrl);
+      if (response.ok) {
+        const data = await response.json();
+        return res.json({ ok: true, data });
+      }
+    } catch (e) {
+      // try next host
+    }
+  }
+
+  return res.status(502).json({ ok: false, error: 'No se pudieron obtener klines de Binance', data: [] });
+});
+
 // 4. GET /api/binance/futures/orders
 app.get('/api/binance/futures/orders', async (req: Request, res: Response) => {
   const creds = getBinanceCredentials(req);
