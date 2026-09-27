@@ -161,23 +161,46 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   const dLow = dailyCandle?.low || Math.min(dOpen, dClose, livePrice * 0.955);
   const dChange = dOpen > 0 ? ((dClose - dOpen) / dOpen) * 100 : 0;
 
-  // LA ESCALA DE REFERENCIA ES ESTRICTAMENTE EL MÁXIMO Y MÍNIMO DE LA TEMPORALIDAD DIARIA
-  const minScale = dLow;
-  const maxScale = dHigh;
-  const scaleSpan = Math.max(0.000001, maxScale - minScale);
+  // 1. ESCALA INDEPENDIENTE PARA LA BARRA SUPERIOR DE TRADING (SL, Entrada, Live, TP1, TP2, TP3)
+  const { minTradeScale, tradeScaleSpan } = useMemo(() => {
+    const min = Math.min(stopLoss, entryPrice, livePrice, tp1, tp2, tp3);
+    const max = Math.max(stopLoss, entryPrice, livePrice, tp1, tp2, tp3);
+    const padding = (max - min) * 0.04 || min * 0.02;
+    const minP = Math.max(0, min - padding);
+    const maxP = max + padding;
+    return {
+      minTradeScale: minP,
+      tradeScaleSpan: Math.max(0.000001, maxP - minP)
+    };
+  }, [stopLoss, entryPrice, livePrice, tp1, tp2, tp3]);
+
+  // Posiciones porcentuales para la barra superior independiente
+  const getTradePercentPos = (price: number) => {
+    const pos = ((price - minTradeScale) / tradeScaleSpan) * 100;
+    return Math.max(2, Math.min(98, pos));
+  };
+
+  const tradeLivePos = getTradePercentPos(livePrice);
+  const tradeEntryPos = getTradePercentPos(entryPrice);
+  const tradeSlPos = getTradePercentPos(stopLoss);
+  const tradeTp1Pos = getTradePercentPos(tp1);
+  const tradeTp2Pos = getTradePercentPos(tp2);
+  const tradeTp3Pos = getTradePercentPos(tp3);
+
+  // 2. ESCALA DE REFERENCIA DIARIA EXCLUSIVA PARA LAS TEMPORALIDADES (PUB, 5M, 15M, 1H, 4H, DIARIO)
+  const minDailyScale = dLow;
+  const maxDailyScale = dHigh;
+  const dailyScaleSpan = Math.max(0.000001, maxDailyScale - minDailyScale);
 
   // Convert price to percentage position (0% -> 100%) on the daily scale [dLow, dHigh]
-  const getPercentPos = (price: number) => {
-    const pos = ((price - minScale) / scaleSpan) * 100;
+  const getDailyPercentPos = (price: number) => {
+    const pos = ((price - minDailyScale) / dailyScaleSpan) * 100;
     return Math.max(0, Math.min(100, pos));
   };
 
-  const livePos = getPercentPos(livePrice);
-  const entryPos = getPercentPos(entryPrice);
-  const slPos = getPercentPos(stopLoss);
-  const tp1Pos = getPercentPos(tp1);
-  const tp2Pos = getPercentPos(tp2);
-  const tp3Pos = getPercentPos(tp3);
+  const dailyLivePos = getDailyPercentPos(livePrice);
+  const dailyEntryPos = getDailyPercentPos(entryPrice);
+  const dailySlPos = getDailyPercentPos(stopLoss);
 
   // Timeframe Rows strictly ordered from top to bottom:
   // 1. Horas transcurridas (PUB - Dinámica con Círculo LIVE)
@@ -247,10 +270,10 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
       const higherIndex = isCurrentHigher ? currentIndex : nextIndex;
       const lowerIndex = isCurrentHigher ? nextIndex : currentIndex;
 
-      const x1 = getPercentPos(higherTF.close);
+      const x1 = getDailyPercentPos(higherTF.close);
       const y1 = ((higherIndex + 0.5) / totalRows) * 100;
 
-      const x2 = getPercentPos(lowerTF.open);
+      const x2 = getDailyPercentPos(lowerTF.open);
       const y2 = ((lowerIndex + 0.5) / totalRows) * 100;
 
       conns.push({
@@ -266,7 +289,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
     }
 
     return conns;
-  }, [timeframesList, showConnectors, minScale, scaleSpan, pubInfo.hours]);
+  }, [timeframesList, showConnectors, minDailyScale, dailyScaleSpan, pubInfo.hours]);
 
   // ATR metrics
   const atrVal = tfData?.atr14 || (livePrice * 0.02);
@@ -389,11 +412,11 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
           <span className="text-[10px] text-amber-300 font-mono font-bold flex items-center gap-1 bg-amber-950/50 px-2 py-0.5 rounded border border-amber-500/30">
             <Layers className="w-3 h-3 text-amber-400" />
-            Escala Rectora: DIARIO ({formatPrice(minScale)} — {formatPrice(maxScale)})
+            Escala Rectora: DIARIO ({formatPrice(minDailyScale)} — {formatPrice(maxDailyScale)})
           </span>
         </div>
 
-        {/* SECCIÓN SUPERIOR DE LA BARRA: Pista Master con Marcadores de Precio (SL, E1, Live, TP1-3) */}
+        {/* SECCIÓN SUPERIOR DE LA BARRA: Pista Master Independiente de Trading (SL, E1, Live, TP1-3) */}
         <div className="relative pt-6 pb-7">
           
           {/* Pista Gradiente de Fondo */}
@@ -406,18 +429,18 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                   : 'bg-gradient-to-r from-rose-500/70 via-rose-500/60 to-amber-500/50 shadow-md shadow-rose-500/20'
               }`}
               style={{ 
-                left: `${Math.min(livePos, entryPos)}%`, 
-                width: `${Math.abs(livePos - entryPos)}%` 
+                left: `${Math.min(tradeLivePos, tradeEntryPos)}%`, 
+                width: `${Math.abs(tradeLivePos - tradeEntryPos)}%` 
               }}
             >
               <div 
                 className={`absolute inset-0 pointer-events-none opacity-40 ${
-                  livePos >= entryPos ? 'animate-flow-stripes-right' : 'animate-flow-stripes-left'
+                  tradeLivePos >= tradeEntryPos ? 'animate-flow-stripes-right' : 'animate-flow-stripes-left'
                 }`} 
               />
               <div 
                 className={`absolute inset-0 pointer-events-none bg-gradient-to-r from-transparent via-white/40 to-transparent ${
-                  livePos >= entryPos ? 'animate-laser-right' : 'animate-laser-left'
+                  tradeLivePos >= tradeEntryPos ? 'animate-laser-right' : 'animate-laser-left'
                 }`} 
               />
             </div>
@@ -426,7 +449,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           {/* Marcador 1: Stop Loss */}
           <div 
             className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
-            style={{ left: `${slPos}%`, transform: 'translate(-50%, -50%)' }}
+            style={{ left: `${tradeSlPos}%`, transform: 'translate(-50%, -50%)' }}
           >
             <div className="w-4 h-4 rounded-full bg-amber-400 border-2 border-slate-950 shadow-md flex items-center justify-center text-[8px] font-bold text-slate-950">
               SL
@@ -442,7 +465,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           {/* Marcador 2: Entrada (E1) */}
           <div 
             className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
-            style={{ left: `${entryPos}%`, transform: 'translate(-50%, -50%)' }}
+            style={{ left: `${tradeEntryPos}%`, transform: 'translate(-50%, -50%)' }}
           >
             <div className="w-4 h-4 rounded-full bg-cyan-400 ring-4 ring-cyan-500/20 border-2 border-slate-950 shadow-md flex items-center justify-center text-[8px] font-bold text-slate-950">
               E1
@@ -455,7 +478,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           {/* Marcador 3: LIVE Price Glowing Tag */}
           <div 
             className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none z-30 transition-all duration-300"
-            style={{ left: `${livePos}%`, transform: 'translateX(-50%)' }}
+            style={{ left: `${tradeLivePos}%`, transform: 'translateX(-50%)' }}
           >
             <span className="bg-cyan-500 text-slate-950 font-mono text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-lg shadow-cyan-500/40 -translate-y-2">
               {formatPrice(livePrice)}
@@ -469,7 +492,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           {/* Marcadores TP1, TP2, TP3 */}
           <div 
             className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
-            style={{ left: `${tp1Pos}%`, transform: 'translate(-50%, -50%)' }}
+            style={{ left: `${tradeTp1Pos}%`, transform: 'translate(-50%, -50%)' }}
           >
             <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
             <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
@@ -479,7 +502,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
           <div 
             className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
-            style={{ left: `${tp2Pos}%`, transform: 'translate(-50%, -50%)' }}
+            style={{ left: `${tradeTp2Pos}%`, transform: 'translate(-50%, -50%)' }}
           >
             <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
             <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
@@ -489,7 +512,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
           <div 
             className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
-            style={{ left: `${tp3Pos}%`, transform: 'translate(-50%, -50%)' }}
+            style={{ left: `${tradeTp3Pos}%`, transform: 'translate(-50%, -50%)' }}
           >
             <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
             <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
@@ -552,19 +575,19 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
               {/* Guía Vertical Continua: ENTRADA (E1) */}
               <div 
                 className="absolute top-0 bottom-0 z-20 pointer-events-none border-r border-dashed border-cyan-500/70"
-                style={{ left: `${entryPos}%` }}
+                style={{ left: `${dailyEntryPos}%` }}
               />
 
               {/* Guía Vertical Continua: PRECIO LIVE */}
               <div 
                 className="absolute top-0 bottom-0 z-20 pointer-events-none border-r border-cyan-400/80 shadow-[0_0_6px_#38bdf8]"
-                style={{ left: `${livePos}%` }}
+                style={{ left: `${dailyLivePos}%` }}
               />
 
               {/* Guía Vertical Continua: STOP LOSS */}
               <div 
                 className="absolute top-0 bottom-0 z-10 pointer-events-none border-r border-dashed border-amber-500/40"
-                style={{ left: `${slPos}%` }}
+                style={{ left: `${dailySlPos}%` }}
               />
 
               {/* CAPA SVG: UNE EL CIERRE DE LA TEMPORALIDAD MAYOR CON LA APERTURA DE LA MENOR (SIN EL DIARIO) */}
@@ -617,16 +640,16 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
               {/* Renderizado de cada pista horizontal */}
               {timeframesList.map((tf) => {
                 const isUp = tf.changePercent >= 0;
-                const openPos = getPercentPos(tf.open);
-                const closePos = getPercentPos(tf.close);
+                const openPos = getDailyPercentPos(tf.open);
+                const closePos = getDailyPercentPos(tf.close);
                 const barLeft = Math.min(openPos, closePos);
                 const barWidth = Math.max(2.5, Math.abs(closePos - openPos));
                 const isPub = (tf as any).isPublicationTimeframe;
                 const isDiario = tf.timeframe === '1d';
 
                 // Posiciones para el DIARIO (llena toda la barra y deja en gris el recorrido restante al max/min)
-                const dLowPos = isDiario ? getPercentPos(dLow) : 0;
-                const dHighPos = isDiario ? getPercentPos(dHigh) : 100;
+                const dLowPos = isDiario ? getDailyPercentPos(dLow) : 0;
+                const dHighPos = isDiario ? getDailyPercentPos(dHigh) : 100;
                 const dailyBarLeft = Math.min(dLowPos, dHighPos);
                 const dailyBarWidth = Math.max(2.5, Math.abs(dHighPos - dLowPos));
 
