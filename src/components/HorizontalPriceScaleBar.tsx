@@ -228,20 +228,20 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
   // Timeframe Rows strictly ordered from top to bottom:
   // 1. Horas transcurridas (PUB - Dinámica con Círculo LIVE)
-  // 2. 5M (Cerrada - Pasado del precio)
-  // 3. 15M (Cerrada - Pasado del precio)
-  // 4. 1H (Cerrada - Pasado del precio)
-  // 5. 4H (Cerrada - Pasado del precio)
+  // 2. 4H (Cerrada - Pasado del precio)
+  // 3. 1H (Cerrada - Pasado del precio)
+  // 4. 15M (Cerrada - Pasado del precio)
+  // 5. 5M (Cerrada - Pasado del precio)
   // 6. DIARIO (Escala rectora con Círculo LIVE)
   const timeframesList = useMemo(() => {
     const candles = tfData?.candles || {};
     const baseRef = entryPrice || livePrice || 100;
     return [
       pubCandle,
-      { ...(candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: baseRef * 0.9940, close: baseRef * 0.9975, changePercent: 0.35 }), durationMinutes: 5, isClosed: true },
-      { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: baseRef * 0.9910, close: baseRef * 0.9940, changePercent: 0.30 }), durationMinutes: 15, isClosed: true },
-      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: baseRef * 0.9850, close: baseRef * 0.9910, changePercent: 0.61 }), durationMinutes: 60, isClosed: true },
       { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: baseRef * 0.9750, close: baseRef * 0.9850, changePercent: 1.03 }), durationMinutes: 240, isClosed: true },
+      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: baseRef * 0.9850, close: baseRef * 0.9910, changePercent: 0.61 }), durationMinutes: 60, isClosed: true },
+      { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: baseRef * 0.9910, close: baseRef * 0.9940, changePercent: 0.30 }), durationMinutes: 15, isClosed: true },
+      { ...(candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: baseRef * 0.9940, close: baseRef * 0.9975, changePercent: 0.35 }), durationMinutes: 5, isClosed: true },
       { 
         timeframe: '1d', 
         label: 'DIARIO', 
@@ -258,7 +258,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
     ];
   }, [tfData, entryPrice, pubCandle, dOpen, dClose, dHigh, dLow, dChange]);
 
-  // UNIONES: Solo se conectan [Horas transcurridas, 5m, 15m, 1h, 4h].
+  // UNIONES: Solo se conectan [Horas transcurridas, 4h, 1h, 15m, 5m].
   // El DIARIO NO SE DEBE CONECTAR.
   const connections = useMemo(() => {
     if (!showConnectors || timeframesList.length < 2) return [];
@@ -372,7 +372,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           {/* Toggle Unir Recorridos */}
           <button
             onClick={() => setShowConnectors(!showConnectors)}
-            title="Conectar el Cierre de la mayor con la Apertura de la menor (PUB, 5M, 15M, 1H, 4H)"
+            title="Conectar el Cierre de la mayor con la Apertura de la menor (PUB, 4H, 1H, 15M, 5M)"
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all cursor-pointer text-xs font-bold ${
               showConnectors 
                 ? 'bg-cyan-950 text-cyan-300 border-cyan-500/60 shadow-sm shadow-cyan-500/20' 
