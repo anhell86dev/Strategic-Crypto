@@ -27,13 +27,47 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
   onFilterGreen,
   isGreenFilterActive = false
 }) => {
-  // Local state for interactive investment and leverage inputs per strategy
+  // Local state for interactive investment, leverage, checked entry levels, and editable entry prices per strategy
   const [investments, setInvestments] = useState<Record<string, number>>({});
   const [leverages, setLeverages] = useState<Record<string, number>>({});
+  const [checkedEntries, setCheckedEntries] = useState<Record<string, { e1: boolean; e2: boolean; e3: boolean }>>({});
+  const [customPrices, setCustomPrices] = useState<Record<string, { e1?: number; e2?: number; e3?: number }>>({});
 
   if (!topStrategies || topStrategies.length === 0) {
     return null;
   }
+
+  const handleCustomPriceChange = (stratId: string | number, level: 'e1' | 'e2' | 'e3', valueStr: string) => {
+    const key = String(stratId);
+    const val = parseFloat(valueStr);
+    setCustomPrices(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        [level]: isNaN(val) || val <= 0 ? undefined : val
+      }
+    }));
+  };
+
+  const getChecked = (stratId: string | number) => {
+    const current = checkedEntries[String(stratId)];
+    if (!current) {
+      return { e1: true, e2: false, e3: false };
+    }
+    return current;
+  };
+
+  const toggleChecked = (stratId: string | number, level: 'e1' | 'e2' | 'e3') => {
+    const key = String(stratId);
+    const current = getChecked(key);
+    setCheckedEntries(prev => ({
+      ...prev,
+      [key]: {
+        ...current,
+        [level]: !current[level]
+      }
+    }));
+  };
 
   const formatPrice = (p?: number) => {
     if (p === undefined || p === null) return '--';
@@ -192,14 +226,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               </th>
               <th rowSpan={2} className="py-3 px-3 text-center border-r border-slate-800">Nominal ($)</th>
               
-              {/* Group 1: Entradas DCA */}
-              <th colSpan={3} className="py-2 px-3 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
-                Entradas DCA (E1, E2, E3) & Activos
+              {/* Single Stop Loss Column */}
+              <th rowSpan={2} className="py-3 px-3 text-center text-rose-300 bg-rose-950/90 border-r border-slate-800">
+                Stop Loss ($)
               </th>
 
-              {/* Group 2: Stop Loss */}
-              <th colSpan={3} className="py-2 px-3 text-center text-rose-300 bg-rose-950/80 border-r border-b border-rose-700/60">
-                Stop Loss
+              {/* Group 2: Entradas DCA */}
+              <th colSpan={3} className="py-2 px-3 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
+                Entradas DCA (E3, E2, E1) & Activos
               </th>
 
               {/* Group 3: Take Profit */}
@@ -210,15 +244,10 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
             {/* Sub-Headers Row 2 */}
             <tr className="border-b-2 border-emerald-500/40 text-[11px] font-black uppercase tracking-wider bg-slate-950">
-              {/* DCA Sub-headers */}
-              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40">E1</th>
+              {/* DCA Sub-headers (inverted: E3, E2, E1) */}
+              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40">E3</th>
               <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40">E2</th>
-              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800">E3</th>
-
-              {/* Stop Loss Sub-headers */}
-              <th className="py-2 px-2 text-center text-rose-300 bg-rose-950/40 border-r border-rose-800/40">E1</th>
-              <th className="py-2 px-2 text-center text-rose-300 bg-rose-950/40 border-r border-rose-800/40">E1+2</th>
-              <th className="py-2 px-2 text-center text-rose-300 bg-rose-950/40 border-r border-slate-800">Full</th>
+              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800">E1</th>
 
               {/* Take Profit Sub-headers */}
               <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40">TP1</th>
@@ -248,8 +277,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const nominalTotal = inv * lev;
 
               // Entry Allocations DCA
-              const hasE2 = Boolean(strat.e2Price && strat.e2Price > 0);
-              const hasE3 = Boolean(strat.e3Price && strat.e3Price > 0);
+              const stratCustoms = customPrices[String(strat.id)] || {};
+
+              const pE1 = stratCustoms.e1 ?? (strat.entryPrice || currentPrice);
+              const pE2 = stratCustoms.e2 ?? (strat.e2Price || (pE1 > 0 ? (isLong ? pE1 * 0.98 : pE1 * 1.02) : 0));
+              const pE3 = stratCustoms.e3 ?? (strat.e3Price || (pE2 > 0 ? (isLong ? pE2 * 0.98 : pE2 * 1.02) : 0));
+
+              const hasE2 = Boolean(strat.e2Price || stratCustoms.e2 || pE2 > 0);
+              const hasE3 = Boolean(strat.e3Price || stratCustoms.e3 || pE3 > 0);
 
               const e1Pct = hasE2 || hasE3 ? (strat.e1AllocationPercent || 50) : 100;
               const e2Pct = hasE2 ? (strat.e2AllocationPercent || 30) : 0;
@@ -258,10 +293,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const nominalE1 = nominalTotal * (e1Pct / 100);
               const nominalE2 = nominalTotal * (e2Pct / 100);
               const nominalE3 = nominalTotal * (e3Pct / 100);
-
-              const pE1 = strat.entryPrice || currentPrice;
-              const pE2 = strat.e2Price || pE1;
-              const pE3 = strat.e3Price || pE1;
 
               const assetsE1 = pE1 > 0 ? nominalE1 / pE1 : 0;
               const assetsE2 = (hasE2 && pE2 > 0) ? nominalE2 / pE2 : 0;
@@ -285,6 +316,33 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 ? (assetsE1 * (pE1 - slPrice)) + (assetsE2 * (pE2 - slPrice)) + (assetsE3 * (pE3 - slPrice))
                 : (assetsE1 * (slPrice - pE1)) + (assetsE2 * (slPrice - pE2)) + (assetsE3 * (slPrice - pE3));
 
+              // Checkbox state for active executed entries
+              const checked = getChecked(strat.id);
+
+              // Calculate active accumulated position based on CHECKED entries
+              let activeNominal = 0;
+              let activeAssets = 0;
+
+              if (checked.e1) {
+                activeNominal += nominalE1;
+                activeAssets += assetsE1;
+              }
+              if (checked.e2 && hasE2) {
+                activeNominal += nominalE2;
+                activeAssets += assetsE2;
+              }
+              if (checked.e3 && hasE3) {
+                activeNominal += nominalE3;
+                activeAssets += assetsE3;
+              }
+
+              const activeAvgEntryPrice = activeAssets > 0 ? activeNominal / activeAssets : pE1;
+
+              // Active loss for checked position
+              const activeLoss = isLong
+                ? activeAssets * (activeAvgEntryPrice - slPrice)
+                : activeAssets * (slPrice - activeAvgEntryPrice);
+
               // Build list of all DCA Entries (E1, E2, E3)
               const entryLevels = [
                 { label: 'E1', price: pE1, pct: e1Pct, assets: assetsE1 }
@@ -292,7 +350,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               if (hasE2) entryLevels.push({ label: 'E2', price: pE2, pct: e2Pct, assets: assetsE2 });
               if (hasE3) entryLevels.push({ label: 'E3', price: pE3, pct: e3Pct, assets: assetsE3 });
 
-              // All TP Orders with USD Profit calculation
+              // All TP Orders with USD Profit calculation based on ACTIVE checked position
               const allTpOrders = [...(strat.orders || [])].sort((a, b) => {
                 if (isLong) return a.targetPrice - b.targetPrice;
                 return b.targetPrice - a.targetPrice;
@@ -302,13 +360,15 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const tp2 = allTpOrders[1];
               const tp3 = allTpOrders[2];
 
-              const calcTpProfit = (tp?: { targetPrice: number; closePercentage?: number }) => {
+              const calcTpProfitActive = (tp?: { targetPrice: number; closePercentage?: number }) => {
                 if (!tp || !tp.targetPrice) return null;
                 const closePct = tp.closePercentage || 100;
-                const assetsClosed = totalAssets * (closePct / 100);
-                const profitUsd = isLong
-                  ? assetsClosed * (tp.targetPrice - avgEntryPrice)
-                  : assetsClosed * (avgEntryPrice - tp.targetPrice);
+                const assetsClosed = activeAssets * (closePct / 100);
+                const profitUsd = activeAssets > 0
+                  ? (isLong
+                      ? assetsClosed * (tp.targetPrice - activeAvgEntryPrice)
+                      : assetsClosed * (activeAvgEntryPrice - tp.targetPrice))
+                  : 0;
                 return {
                   price: tp.targetPrice,
                   profit: profitUsd,
@@ -316,9 +376,17 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 };
               };
 
-              const tp1Data = calcTpProfit(tp1);
-              const tp2Data = calcTpProfit(tp2);
-              const tp3Data = calcTpProfit(tp3);
+              const tp1Data = calcTpProfitActive(tp1);
+              const tp2Data = calcTpProfitActive(tp2);
+              const tp3Data = calcTpProfitActive(tp3);
+
+              // Helper to compute % distance from LIVE price to target price
+              const getDistPctStr = (targetP?: number) => {
+                if (!currentPrice || !targetP || targetP <= 0) return null;
+                const pct = ((targetP - currentPrice) / currentPrice) * 100;
+                const sign = pct > 0 ? '+' : '';
+                return `${sign}${pct.toFixed(2)}%`;
+              };
 
               return (
                 <React.Fragment key={strat.id}>
@@ -458,92 +526,161 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       </span>
                     </td>
 
-                    {/* DCA E1 */}
-                    <td className="py-2.5 px-3 text-center whitespace-nowrap bg-cyan-950/20 border-r border-cyan-800/40">
+                    {/* Stop Loss (1 Single Cell) */}
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap bg-rose-950/30 border-r border-slate-800 font-mono">
+                      <div className="flex flex-col items-center justify-center gap-0.5">
+                        <span className="font-black text-rose-200 text-xs sm:text-sm bg-rose-900 border border-rose-500 px-2.5 py-0.5 rounded-lg shadow-sm">
+                          -${activeLoss.toFixed(2)}
+                        </span>
+                        <span className="font-bold text-rose-300/90 text-xs">{formatPrice(slPrice)}</span>
+                        <span className="text-[10px] font-black text-rose-300 bg-rose-950/90 border border-rose-700/80 px-1.5 py-0.2 rounded mt-0.5">
+                          {getDistPctStr(slPrice)}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* DCA E3 */}
+                    <td className={`py-2.5 px-3 text-center whitespace-nowrap border-r border-cyan-800/40 transition-all ${
+                      checked.e3 ? 'bg-cyan-950/40' : 'bg-slate-950/30 opacity-60'
+                    }`}>
                       <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
-                        <div className="font-bold text-cyan-200">{formatPrice(pE1)}</div>
-                        <div className="font-medium text-slate-300">{assetsE1 < 1 ? assetsE1.toFixed(4) : assetsE1.toFixed(2)}</div>
-                        <div className="font-black text-cyan-300">${nominalE1.toFixed(2)}</div>
+                        <label
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 cursor-pointer bg-cyan-950/90 hover:bg-cyan-900 border border-cyan-500/70 px-1.5 py-0.5 rounded text-[10px] font-bold text-cyan-300 shadow-xs mb-0.5"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked.e3}
+                            onChange={() => toggleChecked(strat.id, 'e3')}
+                            className="w-3.5 h-3.5 accent-cyan-400 rounded cursor-pointer"
+                          />
+                          <span>E3</span>
+                        </label>
+                        <div className="flex items-center justify-center my-0.5" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="E3 ($)"
+                            value={pE3 || ''}
+                            onChange={(e) => handleCustomPriceChange(strat.id, 'e3', e.target.value)}
+                            className={`w-20 px-1 py-0.5 text-xs text-center font-bold font-mono rounded border transition-all ${
+                              checked.e3
+                                ? 'bg-slate-900 text-cyan-200 border-cyan-500/80 focus:border-cyan-300 focus:ring-1 focus:ring-cyan-300'
+                                : 'bg-slate-950 text-slate-500 border-slate-700/60'
+                            }`}
+                          />
+                        </div>
+                        {hasE3 && (
+                          <>
+                            <div className={`font-medium ${checked.e3 ? 'text-slate-200' : 'text-slate-500'}`}>
+                              {totalAssets < 1 ? totalAssets.toFixed(4) : totalAssets.toFixed(2)}{' '}
+                              <span className="text-[10px] text-cyan-400 font-bold">
+                                (+{assetsE3 < 1 ? assetsE3.toFixed(4) : assetsE3.toFixed(2)})
+                              </span>
+                            </div>
+                            <div className={`font-black ${checked.e3 ? 'text-cyan-300' : 'text-slate-500'}`}>
+                              ${nominalTotal.toFixed(2)}{' '}
+                              <span className="text-[10px] text-emerald-400 font-bold">
+                                (+${nominalE3.toFixed(2)})
+                              </span>
+                            </div>
+                          </>
+                        )}
+                        <span className="text-[10px] font-black text-cyan-300 bg-cyan-950/90 border border-cyan-700/80 px-1.5 py-0.2 rounded mt-0.5">
+                          {getDistPctStr(pE3)}
+                        </span>
                       </div>
                     </td>
 
                     {/* DCA E2 */}
-                    <td className="py-2.5 px-3 text-center whitespace-nowrap bg-cyan-950/20 border-r border-cyan-800/40">
-                      {hasE2 ? (
-                        <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
-                          <div className="font-bold text-cyan-200">{formatPrice(pE2)}</div>
-                          <div className="font-medium text-slate-300">
-                            {assetsE12 < 1 ? assetsE12.toFixed(4) : assetsE12.toFixed(2)}{' '}
-                            <span className="text-[10px] text-cyan-400 font-bold">
-                              (+{assetsE2 < 1 ? assetsE2.toFixed(4) : assetsE2.toFixed(2)})
-                            </span>
-                          </div>
-                          <div className="font-black text-cyan-300">
-                            ${nominalE12.toFixed(2)}{' '}
-                            <span className="text-[10px] text-emerald-400 font-bold">
-                              (+${nominalE2.toFixed(2)})
-                            </span>
-                          </div>
+                    <td className={`py-2.5 px-3 text-center whitespace-nowrap border-r border-cyan-800/40 transition-all ${
+                      checked.e2 ? 'bg-cyan-950/40' : 'bg-slate-950/30 opacity-60'
+                    }`}>
+                      <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
+                        <label
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 cursor-pointer bg-cyan-950/90 hover:bg-cyan-900 border border-cyan-500/70 px-1.5 py-0.5 rounded text-[10px] font-bold text-cyan-300 shadow-xs mb-0.5"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked.e2}
+                            onChange={() => toggleChecked(strat.id, 'e2')}
+                            className="w-3.5 h-3.5 accent-cyan-400 rounded cursor-pointer"
+                          />
+                          <span>E2</span>
+                        </label>
+                        <div className="flex items-center justify-center my-0.5" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="E2 ($)"
+                            value={pE2 || ''}
+                            onChange={(e) => handleCustomPriceChange(strat.id, 'e2', e.target.value)}
+                            className={`w-20 px-1 py-0.5 text-xs text-center font-bold font-mono rounded border transition-all ${
+                              checked.e2
+                                ? 'bg-slate-900 text-cyan-200 border-cyan-500/80 focus:border-cyan-300 focus:ring-1 focus:ring-cyan-300'
+                                : 'bg-slate-950 text-slate-500 border-slate-700/60'
+                            }`}
+                          />
                         </div>
-                      ) : (
-                        <span className="text-slate-500 font-mono text-xs text-center block">--</span>
-                      )}
-                    </td>
-
-                    {/* DCA E3 */}
-                    <td className="py-2.5 px-3 text-center whitespace-nowrap bg-cyan-950/20 border-r border-slate-800">
-                      {hasE3 ? (
-                        <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
-                          <div className="font-bold text-cyan-200">{formatPrice(pE3)}</div>
-                          <div className="font-medium text-slate-300">
-                            {totalAssets < 1 ? totalAssets.toFixed(4) : totalAssets.toFixed(2)}{' '}
-                            <span className="text-[10px] text-cyan-400 font-bold">
-                              (+{assetsE3 < 1 ? assetsE3.toFixed(4) : assetsE3.toFixed(2)})
-                            </span>
-                          </div>
-                          <div className="font-black text-cyan-300">
-                            ${nominalTotal.toFixed(2)}{' '}
-                            <span className="text-[10px] text-emerald-400 font-bold">
-                              (+${nominalE3.toFixed(2)})
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-slate-500 font-mono text-xs text-center block">--</span>
-                      )}
-                    </td>
-
-                    {/* SL E1 */}
-                    <td className="py-2.5 px-3 text-center whitespace-nowrap bg-rose-950/20 border-r border-rose-800/40">
-                      <div className="flex flex-col items-center justify-center gap-0.5">
-                        <span className="font-black text-rose-300 text-xs sm:text-sm font-mono bg-rose-950 px-2 py-0.5 rounded-lg border border-rose-700 shadow-xs">
-                          -${lossE1.toFixed(2)}
+                        {hasE2 && (
+                          <>
+                            <div className={`font-medium ${checked.e2 ? 'text-slate-200' : 'text-slate-500'}`}>
+                              {assetsE12 < 1 ? assetsE12.toFixed(4) : assetsE12.toFixed(2)}{' '}
+                              <span className="text-[10px] text-cyan-400 font-bold">
+                                (+{assetsE2 < 1 ? assetsE2.toFixed(4) : assetsE2.toFixed(2)})
+                              </span>
+                            </div>
+                            <div className={`font-black ${checked.e2 ? 'text-cyan-300' : 'text-slate-500'}`}>
+                              ${nominalE12.toFixed(2)}{' '}
+                              <span className="text-[10px] text-emerald-400 font-bold">
+                                (+${nominalE2.toFixed(2)})
+                              </span>
+                            </div>
+                          </>
+                        )}
+                        <span className="text-[10px] font-black text-cyan-300 bg-cyan-950/90 border border-cyan-700/80 px-1.5 py-0.2 rounded mt-0.5">
+                          {getDistPctStr(pE2)}
                         </span>
-                        <span className="text-[11px] font-medium text-rose-300/80 font-mono">{formatPrice(slPrice)}</span>
                       </div>
                     </td>
 
-                    {/* SL E1+2 */}
-                    <td className="py-2.5 px-3 text-center whitespace-nowrap bg-rose-950/20 border-r border-rose-800/40">
-                      {hasE2 ? (
-                        <div className="flex flex-col items-center justify-center gap-0.5">
-                          <span className="font-black text-rose-300 text-xs sm:text-sm font-mono bg-rose-950/80 px-2 py-0.5 rounded-lg border border-rose-700/80 shadow-xs">
-                            -${lossE12.toFixed(2)}
-                          </span>
-                          <span className="text-[11px] font-medium text-rose-300/80 font-mono">{formatPrice(slPrice)}</span>
+                    {/* DCA E1 */}
+                    <td className={`py-2.5 px-3 text-center whitespace-nowrap border-r border-slate-800 transition-all ${
+                      checked.e1 ? 'bg-cyan-950/40' : 'bg-slate-950/30 opacity-60'
+                    }`}>
+                      <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
+                        <label
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 cursor-pointer bg-cyan-950/90 hover:bg-cyan-900 border border-cyan-500/70 px-1.5 py-0.5 rounded text-[10px] font-bold text-cyan-300 shadow-xs mb-0.5"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked.e1}
+                            onChange={() => toggleChecked(strat.id, 'e1')}
+                            className="w-3.5 h-3.5 accent-cyan-400 rounded cursor-pointer"
+                          />
+                          <span>E1</span>
+                        </label>
+                        <div className="flex items-center justify-center my-0.5" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="E1 ($)"
+                            value={pE1 || ''}
+                            onChange={(e) => handleCustomPriceChange(strat.id, 'e1', e.target.value)}
+                            className={`w-20 px-1 py-0.5 text-xs text-center font-bold font-mono rounded border transition-all ${
+                              checked.e1
+                                ? 'bg-slate-900 text-cyan-200 border-cyan-500/80 focus:border-cyan-300 focus:ring-1 focus:ring-cyan-300'
+                                : 'bg-slate-950 text-slate-500 border-slate-700/60'
+                            }`}
+                          />
                         </div>
-                      ) : (
-                        <span className="text-slate-500 font-mono text-xs text-center block">--</span>
-                      )}
-                    </td>
-
-                    {/* SL Full */}
-                    <td className="py-2.5 px-3 text-center whitespace-nowrap bg-rose-950/20 border-r border-slate-800">
-                      <div className="flex flex-col items-center justify-center gap-0.5">
-                        <span className="font-black text-rose-200 text-xs sm:text-sm font-mono bg-rose-900 px-2 py-0.5 rounded-lg border-2 border-rose-500 shadow-xs">
-                          -${lossFull.toFixed(2)}
+                        <div className={`font-medium ${checked.e1 ? 'text-slate-200' : 'text-slate-500'}`}>{assetsE1 < 1 ? assetsE1.toFixed(4) : assetsE1.toFixed(2)}</div>
+                        <div className={`font-black ${checked.e1 ? 'text-cyan-300' : 'text-slate-500'}`}>${nominalE1.toFixed(2)}</div>
+                        <span className="text-[10px] font-black text-cyan-300 bg-cyan-950/90 border border-cyan-700/80 px-1.5 py-0.2 rounded mt-0.5">
+                          {getDistPctStr(pE1)}
                         </span>
-                        <span className="text-[11px] font-medium text-rose-300/80 font-mono">{formatPrice(slPrice)}</span>
                       </div>
                     </td>
 
@@ -555,6 +692,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             +${tp1Data.profit.toFixed(2)}
                           </div>
                           <div className="font-medium text-emerald-200/80 text-[11px]">{formatPrice(tp1Data.price)}</div>
+                          <span className="text-[10px] font-black text-emerald-300 bg-emerald-950/90 border border-emerald-700/80 px-1.5 py-0.2 rounded mt-0.5">
+                            {getDistPctStr(tp1Data.price)}
+                          </span>
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs text-center block">--</span>
@@ -569,6 +709,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             +${tp2Data.profit.toFixed(2)}
                           </div>
                           <div className="font-medium text-emerald-200/80 text-[11px]">{formatPrice(tp2Data.price)}</div>
+                          <span className="text-[10px] font-black text-emerald-300 bg-emerald-950/90 border border-emerald-700/80 px-1.5 py-0.2 rounded mt-0.5">
+                            {getDistPctStr(tp2Data.price)}
+                          </span>
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs text-center block">--</span>
@@ -583,6 +726,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             +${tp3Data.profit.toFixed(2)}
                           </div>
                           <div className="font-medium text-emerald-200/80 text-[11px]">{formatPrice(tp3Data.price)}</div>
+                          <span className="text-[10px] font-black text-emerald-300 bg-emerald-950/90 border border-emerald-700/80 px-1.5 py-0.2 rounded mt-0.5">
+                            {getDistPctStr(tp3Data.price)}
+                          </span>
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs text-center block">--</span>
@@ -590,14 +736,99 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
                   </tr>
 
-                  {/* Sub-row Footer Banner for BE */}
-                  <tr className="bg-slate-950 border-b border-slate-800">
-                    <td colSpan={7} className="py-1 px-2 border-r border-slate-800"></td>
-                    <td colSpan={3} className="py-1 px-3 text-center text-xs font-black text-amber-300 bg-amber-950/80 border-r border-b border-amber-500/60 font-mono">
-                      BE: {formatPrice(avgEntryPrice)}
-                    </td>
-                    <td colSpan={6} className="py-1 px-2"></td>
-                  </tr>
+                  {/* Sub-row Footer Banner: Continuous SL -> BE -> DCA -> TP Track with Moving White Circle & Trend Animation */}
+                  {(() => {
+                    const liveVsBePct = activeAvgEntryPrice > 0
+                      ? ((currentPrice - activeAvgEntryPrice) / activeAvgEntryPrice) * 100 * (isLong ? 1 : -1)
+                      : 0;
+                    const isAdvancing = liveVsBePct >= 0;
+
+                    const tpMaxP = tp3Data?.price || tp2Data?.price || tp1Data?.price || (isLong ? pE1 * 1.05 : pE1 * 0.95);
+                    const slP = slPrice || (isLong ? pE1 * 0.95 : pE1 * 1.05);
+
+                    let posPct = 50;
+                    if (tpMaxP !== slP) {
+                      if (isLong) {
+                        posPct = ((currentPrice - slP) / (tpMaxP - slP)) * 100;
+                      } else {
+                        posPct = ((slP - currentPrice) / (slP - tpMaxP)) * 100;
+                      }
+                    }
+                    posPct = Math.max(3, Math.min(97, posPct));
+
+                    return (
+                      <tr className="bg-slate-950 border-b border-slate-800">
+                        {/* Cols 1 to 7: Rank, Semáforo, Par, LIVE, Inversión, Apalancamiento, Nominal */}
+                        <td colSpan={7} className="py-1 px-2 border-r border-slate-800"></td>
+
+                        {/* Cols 8 to 14: Stop Loss (1), DCA Entries (3), Take Profits (3) = 7 Cols */}
+                        <td colSpan={7} className="py-2 px-3 border-r border-b border-slate-800 bg-slate-950/90">
+                          <div className="relative w-full flex flex-col gap-1.5 font-mono">
+                            {/* Visual Shaded Track Bar: Red (SL) -> Amber (BE) -> Cyan (DCA) -> Green (TP) */}
+                            <div className="relative w-full h-5 rounded-full overflow-hidden flex border-2 border-slate-700/80 bg-slate-900 shadow-inner">
+                              {/* Red Segment (Stop Loss) - 15% */}
+                              <div className="w-[15%] h-full bg-gradient-to-r from-rose-950 via-rose-900 to-rose-800/80 border-r border-rose-500/50 flex items-center justify-center text-[9px] font-black text-rose-200 uppercase tracking-tight">
+                                🛑 SL
+                              </div>
+
+                              {/* Amber Segment (BE Marcado) - 15% */}
+                              <div className="w-[15%] h-full bg-gradient-to-r from-amber-950 via-amber-900 to-amber-800/80 border-r border-amber-500/50 flex items-center justify-center text-[9px] font-black text-amber-200 uppercase tracking-tight">
+                                ⚖️ BE
+                              </div>
+
+                              {/* Blue/Cyan Segment (Entradas DCA) - 35% */}
+                              <div className="w-[35%] h-full bg-gradient-to-r from-cyan-950 via-sky-900 to-blue-900/80 border-r border-cyan-500/50 flex items-center justify-center text-[9px] font-black text-cyan-200 uppercase tracking-tight">
+                                🎯 DCA
+                              </div>
+
+                              {/* Green Segment (Take Profit) - 35% */}
+                              <div className="w-[35%] h-full bg-gradient-to-r from-emerald-950 via-emerald-900 to-emerald-700/80 flex items-center justify-center text-[9px] font-black text-emerald-200 uppercase tracking-tight">
+                                💰 Take Profit
+                              </div>
+
+                              {/* Moving White Circle (LIVE Price Marker with pulse halo) */}
+                              <div 
+                                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-300 z-20 flex items-center justify-center"
+                                style={{ left: `${posPct}%` }}
+                              >
+                                <div className="relative flex items-center justify-center">
+                                  <span className={`absolute w-6 h-6 rounded-full animate-ping opacity-75 ${
+                                    isAdvancing ? 'bg-emerald-400' : 'bg-rose-400'
+                                  }`} />
+                                  <span 
+                                    title={`LIVE: ${formatPrice(currentPrice)}`}
+                                    className="w-4 h-4 rounded-full bg-white border-2 border-slate-950 shadow-[0_0_12px_#ffffff] z-10 inline-block cursor-pointer ring-2 ring-cyan-400"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Price Labels & Trend Direction below Track */}
+                            <div className="flex items-center justify-between text-[10px] font-bold flex-wrap gap-1">
+                              <span className="text-rose-400 font-mono">SL: {formatPrice(slP)}</span>
+
+                              <span className="text-amber-300 font-mono">BE: {formatPrice(activeAvgEntryPrice)}</span>
+                              
+                              <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm font-mono transition-colors ${
+                                isAdvancing
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-500 shadow-emerald-500/20'
+                                  : 'bg-rose-950 text-rose-300 border border-rose-500 shadow-rose-500/20'
+                              }`}>
+                                <span className={`w-2 h-2 rounded-full ${isAdvancing ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`} />
+                                <span>LIVE: {formatPrice(currentPrice)}</span>
+                                <span className="font-extrabold font-mono">
+                                  {isAdvancing ? '►► AVANZANDO ' : '◄◄ RETROCEDIENDO '}
+                                  ({isAdvancing ? '+' : ''}{liveVsBePct.toFixed(2)}%)
+                                </span>
+                              </span>
+
+                              <span className="text-emerald-400 font-mono">TP Max: {formatPrice(tpMaxP)}</span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })()}
                 </React.Fragment>
               );
             })}
