@@ -267,6 +267,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const assetsE2 = (hasE2 && pE2 > 0) ? nominalE2 / pE2 : 0;
               const assetsE3 = (hasE3 && pE3 > 0) ? nominalE3 / pE3 : 0;
 
+              const assetsE12 = assetsE1 + assetsE2;
+              const nominalE12 = nominalE1 + nominalE2;
+
               const totalAssets = assetsE1 + assetsE2 + assetsE3;
               const avgEntryPrice = totalAssets > 0 ? nominalTotal / totalAssets : pE1;
 
@@ -469,8 +472,18 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       {hasE2 ? (
                         <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
                           <div className="font-bold text-cyan-200">{formatPrice(pE2)}</div>
-                          <div className="font-medium text-slate-300">{assetsE2 < 1 ? assetsE2.toFixed(4) : assetsE2.toFixed(2)}</div>
-                          <div className="font-black text-cyan-300">${nominalE2.toFixed(2)}</div>
+                          <div className="font-medium text-slate-300">
+                            {assetsE12 < 1 ? assetsE12.toFixed(4) : assetsE12.toFixed(2)}{' '}
+                            <span className="text-[10px] text-cyan-400 font-bold">
+                              (+{assetsE2 < 1 ? assetsE2.toFixed(4) : assetsE2.toFixed(2)})
+                            </span>
+                          </div>
+                          <div className="font-black text-cyan-300">
+                            ${nominalE12.toFixed(2)}{' '}
+                            <span className="text-[10px] text-emerald-400 font-bold">
+                              (+${nominalE2.toFixed(2)})
+                            </span>
+                          </div>
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs text-center block">--</span>
@@ -482,8 +495,18 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       {hasE3 ? (
                         <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
                           <div className="font-bold text-cyan-200">{formatPrice(pE3)}</div>
-                          <div className="font-medium text-slate-300">{assetsE3 < 1 ? assetsE3.toFixed(4) : assetsE3.toFixed(2)}</div>
-                          <div className="font-black text-cyan-300">${nominalE3.toFixed(2)}</div>
+                          <div className="font-medium text-slate-300">
+                            {totalAssets < 1 ? totalAssets.toFixed(4) : totalAssets.toFixed(2)}{' '}
+                            <span className="text-[10px] text-cyan-400 font-bold">
+                              (+{assetsE3 < 1 ? assetsE3.toFixed(4) : assetsE3.toFixed(2)})
+                            </span>
+                          </div>
+                          <div className="font-black text-cyan-300">
+                            ${nominalTotal.toFixed(2)}{' '}
+                            <span className="text-[10px] text-emerald-400 font-bold">
+                              (+${nominalE3.toFixed(2)})
+                            </span>
+                          </div>
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs text-center block">--</span>
