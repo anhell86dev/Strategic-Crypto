@@ -1,5 +1,6 @@
 import React from 'react';
 import { StrategyWithOrders } from '../types';
+import { indicatorsService } from '../services/indicatorsService';
 import { 
   Trophy, 
   Flame, 
@@ -15,7 +16,8 @@ import {
   Activity,
   Award,
   Clock,
-  ShieldAlert
+  ShieldAlert,
+  Crosshair
 } from 'lucide-react';
 import { formatStrategyPublicationDate, getStrategyTimeDifference } from './StrategyRow';
 
@@ -153,12 +155,17 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const symbolClean = strat.symbol.replace('USDT', '');
               const displayStrategyName = strat.strategyName || strat.coinName || symbolClean;
 
+              const confluence = indicatorsService.getCompleteConfluence(strat);
+              const { futures, operational } = confluence;
+
               return (
                 <tr
                   key={strat.id}
                   onClick={() => onSelectStrategy && onSelectStrategy(strat)}
                   className={`group transition-colors duration-200 cursor-pointer ${
-                    idx === 0 
+                    operational.isTriggerZoneActive
+                      ? 'bg-cyan-950/40 hover:bg-cyan-950/60 shadow-lg shadow-cyan-500/20'
+                      : idx === 0 
                       ? 'bg-amber-950/15 hover:bg-emerald-950/40' 
                       : 'hover:bg-slate-900/80 bg-slate-950/30'
                   }`}
@@ -176,19 +183,25 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </div>
                   </td>
 
-                  {/* Semáforo Verde Badge */}
+                  {/* Semáforo Verde & Badges FAPI */}
                   <td className="py-3 px-3 whitespace-nowrap">
-                    <div 
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 shadow-sm"
-                      title={strat.trafficLight?.reason || 'Semáforo Verde: Sin SL, sin TP previo, en zona'}
-                    >
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
-                      </span>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
-                        {strat.trafficLight?.label || 'VERDE'}
-                      </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <div 
+                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 shadow-sm"
+                        title={strat.trafficLight?.reason || 'Semáforo Verde: Sin SL, sin TP previo, en zona'}
+                      >
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                          {strat.trafficLight?.label || 'VERDE'}
+                        </span>
+                      </div>
+
+                      <div className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[9px] font-extrabold uppercase ${futures.futuresStatusColor}`}>
+                        <span>🚦 {futures.futuresStatus}</span>
+                      </div>
                     </div>
                   </td>
 

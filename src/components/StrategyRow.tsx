@@ -3,6 +3,8 @@ import { StrategyWithOrders } from '../types';
 import { TakeProfitAccordion } from './TakeProfitAccordion';
 import { HorizontalPriceTrack } from './HorizontalPriceTrack';
 import { StrategyAnalysisModal } from './StrategyAnalysisModal';
+import { StrategyConfluencePanel } from './StrategyConfluencePanel';
+import { indicatorsService } from '../services/indicatorsService';
 import { calculateRiskReward } from '../utils/riskReward';
 import { 
   Target, 
@@ -18,7 +20,9 @@ import {
   Percent,
   Scale,
   Clock,
-  SearchCode
+  SearchCode,
+  Gauge,
+  Crosshair
 } from 'lucide-react';
 
 export const formatStrategyPublicationDate = (rawDate?: string, stratName?: string): string => {
@@ -217,12 +221,19 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
   const displayStrategyName = strategy.strategyName || strategy.coinName || symbolClean;
   const trafficLight = strategy.trafficLight;
 
+  // Calculate Complete Multilayer Confluence Metrics
+  const confluence = indicatorsService.getCompleteConfluence(strategy);
+  const { futures, operational, priorityBadge } = confluence;
+  const isTriggerActive = operational.isTriggerZoneActive;
+
   return (
     <div className={`border-b transition-all duration-300 relative ${
       tpBurstActive
         ? 'animate-tp-burst border-emerald-400 bg-emerald-950/70 shadow-2xl shadow-emerald-500/30 ring-2 ring-emerald-400'
         : isTpHit
         ? 'animate-tp-pulse border-emerald-500/70 bg-emerald-950/40 hover:bg-emerald-950/60 shadow-lg shadow-emerald-500/10'
+        : isTriggerActive
+        ? 'bg-cyan-950/50 hover:bg-cyan-950/70 border-cyan-400/90 shadow-xl shadow-cyan-500/30 ring-2 ring-cyan-400/60'
         : trafficLight?.status === 'ROJO'
         ? 'bg-rose-950/20 hover:bg-rose-950/40 border-rose-900/40'
         : trafficLight?.status === 'NARANJA'
@@ -265,6 +276,8 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
                   <span className="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-emerald-400 opacity-75"></span>
                   <Target className="w-5 h-5 text-emerald-400 relative z-10" />
                 </div>
+              ) : isTriggerActive ? (
+                <Crosshair className="w-5 h-5 text-cyan-400 animate-pulse" />
               ) : isAlert ? (
                 <Target className="w-5 h-5 text-cyan-400 animate-pulse" />
               ) : (
@@ -275,8 +288,8 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
             </div>
           </div>
 
-          {/* Semáforo de Validación de Recorrido */}
-          <div className="shrink-0">
+          {/* Semáforo de Validación & Badges FAPI */}
+          <div className="flex items-center gap-2 shrink-0">
             {trafficLight?.status === 'VERDE' && (
               <div 
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 shadow-md shadow-emerald-500/20"
@@ -328,6 +341,26 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
                     SL TOCADO
                   </span>
                 </div>
+              </div>
+            )}
+
+            {/* Badge Semáforo FAPI Futuros */}
+            <div 
+              className={`hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[10px] font-mono font-extrabold uppercase shadow-sm ${futures.futuresStatusColor}`}
+              title={`Semáforo FAPI Futuros: Score ${futures.futuresScore}%`}
+            >
+              <Zap className="w-3 h-3 text-cyan-400 shrink-0" />
+              <span>{futures.futuresStatus}</span>
+            </div>
+
+            {/* Trigger Zone Pulsing Glow Badge (<1.5% E1) */}
+            {isTriggerActive && (
+              <div 
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-cyan-950/90 border border-cyan-400 text-cyan-300 text-[10px] font-mono font-black animate-pulse shadow-md shadow-cyan-500/30"
+                title="Estrategia en Zona de Gatillo Inmediato (<1.5% a E1)"
+              >
+                <Crosshair className="w-3 h-3 text-cyan-400 animate-spin-slow shrink-0" />
+                <span>GATILLO (&lt;1.5%)</span>
               </div>
             )}
           </div>
@@ -466,11 +499,17 @@ export const StrategyRow: React.FC<StrategyRowProps> = ({
 
       {/* Accordion Content */}
       {isExpanded && (
-        <TakeProfitAccordion
-          strategy={strategy}
-          onUpdateThreshold={onUpdateThreshold}
-          onOpenDcaSimulator={onOpenDcaSimulator}
-        />
+        <div className="border-t border-slate-800 bg-slate-950/60 p-4 space-y-4">
+          {/* Panel Completo de Confluencia Multicapa (Futuros FAPI + Técnica + Rango Operativo) */}
+          <StrategyConfluencePanel strategy={strategy} />
+
+          {/* Matriz de Objetivos Take Profit y Escala Escalonada */}
+          <TakeProfitAccordion
+            strategy={strategy}
+            onUpdateThreshold={onUpdateThreshold}
+            onOpenDcaSimulator={onOpenDcaSimulator}
+          />
+        </div>
       )}
 
       {/* Modal Emergente de Análisis */}

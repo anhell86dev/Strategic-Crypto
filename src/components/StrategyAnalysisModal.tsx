@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { StrategyWithOrders } from '../types';
 import { HorizontalPriceScaleBar } from './HorizontalPriceScaleBar';
+import { StrategyConfluencePanel } from './StrategyConfluencePanel';
 import { 
   StrategyAnalyzerService, 
   StrategyAnalysisResult, 
@@ -343,6 +344,11 @@ export const StrategyAnalysisModal: React.FC<StrategyAnalysisModalProps> = ({
 
               </div>
             ) : null}
+          </div>
+
+          {/* SECTION 3: Confluencia Multicapa & Métricas FAPI */}
+          <div className="space-y-2 pt-2">
+            <StrategyConfluencePanel strategy={strategy} />
           </div>
 
         </div>
