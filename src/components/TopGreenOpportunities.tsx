@@ -492,43 +492,46 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
                     {/* SL E1 */}
                     <td className="py-2.5 px-3 text-center whitespace-nowrap bg-rose-950/20 border-r border-rose-800/40">
-                      <div className="flex items-center justify-center">
-                        <span className="font-black text-rose-300 text-xs sm:text-sm font-mono bg-rose-950 px-2.5 py-1 rounded-lg border border-rose-700 shadow-xs">
+                      <div className="flex flex-col items-center justify-center gap-0.5">
+                        <span className="font-black text-rose-300 text-xs sm:text-sm font-mono bg-rose-950 px-2 py-0.5 rounded-lg border border-rose-700 shadow-xs">
                           -${lossE1.toFixed(2)}
                         </span>
+                        <span className="text-[11px] font-medium text-rose-300/80 font-mono">{formatPrice(slPrice)}</span>
                       </div>
                     </td>
 
                     {/* SL E1+2 */}
                     <td className="py-2.5 px-3 text-center whitespace-nowrap bg-rose-950/20 border-r border-rose-800/40">
-                      <div className="flex items-center justify-center">
-                        {hasE2 ? (
-                          <span className="font-black text-rose-300 text-xs sm:text-sm font-mono bg-rose-950/80 px-2.5 py-1 rounded-lg border border-rose-700/80 shadow-xs">
+                      {hasE2 ? (
+                        <div className="flex flex-col items-center justify-center gap-0.5">
+                          <span className="font-black text-rose-300 text-xs sm:text-sm font-mono bg-rose-950/80 px-2 py-0.5 rounded-lg border border-rose-700/80 shadow-xs">
                             -${lossE12.toFixed(2)}
                           </span>
-                        ) : (
-                          <span className="text-slate-500 font-mono text-xs text-center block">--</span>
-                        )}
-                      </div>
+                          <span className="text-[11px] font-medium text-rose-300/80 font-mono">{formatPrice(slPrice)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500 font-mono text-xs text-center block">--</span>
+                      )}
                     </td>
 
                     {/* SL Full */}
                     <td className="py-2.5 px-3 text-center whitespace-nowrap bg-rose-950/20 border-r border-slate-800">
-                      <div className="flex items-center justify-center">
-                        <span className="font-black text-rose-200 text-xs sm:text-sm font-mono bg-rose-900 px-2.5 py-1 rounded-lg border-2 border-rose-500 shadow-xs">
+                      <div className="flex flex-col items-center justify-center gap-0.5">
+                        <span className="font-black text-rose-200 text-xs sm:text-sm font-mono bg-rose-900 px-2 py-0.5 rounded-lg border-2 border-rose-500 shadow-xs">
                           -${lossFull.toFixed(2)}
                         </span>
+                        <span className="text-[11px] font-medium text-rose-300/80 font-mono">{formatPrice(slPrice)}</span>
                       </div>
                     </td>
 
                     {/* TP1 */}
                     <td className="py-2.5 px-3 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40">
                       {tp1Data ? (
-                        <div className="flex flex-col items-center justify-center gap-1 text-xs font-mono">
-                          <div className="font-bold text-emerald-200">{formatPrice(tp1Data.price)}</div>
+                        <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
                           <div className="font-black text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-600 shadow-xs">
                             +${tp1Data.profit.toFixed(2)}
                           </div>
+                          <div className="font-medium text-emerald-200/80 text-[11px]">{formatPrice(tp1Data.price)}</div>
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs text-center block">--</span>
@@ -538,11 +541,11 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     {/* TP2 */}
                     <td className="py-2.5 px-3 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40">
                       {tp2Data ? (
-                        <div className="flex flex-col items-center justify-center gap-1 text-xs font-mono">
-                          <div className="font-bold text-emerald-200">{formatPrice(tp2Data.price)}</div>
+                        <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
                           <div className="font-black text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-600 shadow-xs">
                             +${tp2Data.profit.toFixed(2)}
                           </div>
+                          <div className="font-medium text-emerald-200/80 text-[11px]">{formatPrice(tp2Data.price)}</div>
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs text-center block">--</span>
@@ -552,11 +555,11 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     {/* TP3 */}
                     <td className="py-2.5 px-3 text-center whitespace-nowrap bg-emerald-950/20">
                       {tp3Data ? (
-                        <div className="flex flex-col items-center justify-center gap-1 text-xs font-mono">
-                          <div className="font-bold text-emerald-200">{formatPrice(tp3Data.price)}</div>
+                        <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-mono">
                           <div className="font-black text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-600 shadow-xs">
                             +${tp3Data.profit.toFixed(2)}
                           </div>
+                          <div className="font-medium text-emerald-200/80 text-[11px]">{formatPrice(tp3Data.price)}</div>
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs text-center block">--</span>
