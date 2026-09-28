@@ -13,6 +13,7 @@ import {
 import { DensityToggle } from './DensityToggle';
 import { ConnectionStatus } from '../types';
 import { GuatemalaClock } from './GuatemalaClock';
+import { Layers, Flame, Key } from 'lucide-react';
 
 interface HeaderProps {
   sheetsStatus: ConnectionStatus;
@@ -25,6 +26,9 @@ interface HeaderProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
   tickCount: number;
+  activeTab?: 'radar' | 'binance';
+  onTabChange?: (tab: 'radar' | 'binance') => void;
+  onOpenGateway?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,7 +42,11 @@ export const Header: React.FC<HeaderProps> = ({
   soundEnabled,
   onToggleSound,
   tickCount,
+  activeTab = 'radar',
+  onTabChange,
+  onOpenGateway
 }) => {
+
   const formatTime = (d: Date | null) => {
     if (!d) return '--:--:--';
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -131,6 +139,34 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Primary Actions & Tool Bar */}
         <div className="flex items-center flex-wrap gap-3 justify-end">
+          {/* Main Tab Navigation Switcher */}
+          {onTabChange && (
+            <div className="flex items-center p-1 bg-slate-900 border border-slate-800 rounded-xl">
+              <button
+                onClick={() => onTabChange('radar')}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${
+                  activeTab === 'radar'
+                    ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Radio className="w-4 h-4" />
+                <span>Radar</span>
+              </button>
+              <button
+                onClick={() => onTabChange('binance')}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${
+                  activeTab === 'binance'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Flame className="w-4 h-4 text-amber-400 fill-amber-400" />
+                <span>Binance Futuros</span>
+              </button>
+            </div>
+          )}
+
           {/* Reloj con tiempo de Guatemala (GMT-6) */}
           <GuatemalaClock />
 
@@ -175,6 +211,17 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Nueva Estrategia</span>
           </button>
 
+          {/* Gateway & Binance API Keys Button */}
+          {onOpenGateway && (
+            <button
+              onClick={onOpenGateway}
+              title="Ajustes de Llaves API & Gateway Binance"
+              className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-amber-500/40 text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+            >
+              <Key className="w-5 h-5" />
+            </button>
+          )}
+
           {/* Settings / Sheets Config */}
           <button
             onClick={onOpenSettings}
@@ -184,6 +231,7 @@ export const Header: React.FC<HeaderProps> = ({
             <Settings className="w-5 h-5" />
           </button>
         </div>
+
       </div>
     </header>
   );
