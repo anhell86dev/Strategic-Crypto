@@ -168,7 +168,10 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
       changePercent: change,
       isPublicationTimeframe: true,
       isDynamic: true,
-      durationMinutes: pubInfo.hours * 60
+      durationMinutes: pubInfo.hours * 60,
+      smaLabel: undefined as string | undefined,
+      smaVal: undefined as number | undefined,
+      smaDirection: undefined as ('UP' | 'DOWN' | undefined)
     };
   }, [pubInfo, entryPrice, livePrice]);
 
@@ -235,20 +238,80 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
   // Timeframe Rows strictly ordered from top to bottom:
   // 1. Horas transcurridas (PUB - Dinámica con Círculo LIVE)
-  // 2. 5M (Cerrada)
-  // 3. 15M (Cerrada)
-  // 4. 1H (Cerrada)
-  // 5. 4H (Cerrada)
-  // 6. DIARIO (Escala rectora con Círculo LIVE)
+  // 2. 5M (Cerrada) con SMA50
+  // 3. 15M (Cerrada) con SMA50
+  // 4. 1H (Cerrada) con SMA50
+  // 5. 4H (Cerrada) con SMA50
+  // 6. DIARIO (Escala rectora con Círculo LIVE) con SMA200
   const timeframesList = useMemo(() => {
     const candles = tfData?.candles || {};
     const baseRef = entryPrice || livePrice || 100;
+
+    const c5m = candles['5m'] || { open: baseRef * 0.9940, close: baseRef * 0.9975, changePercent: 0.35 };
+    const sma50_5m = c5m.open * (isLong ? 0.9980 : 1.0020);
+    const sma50_5m_dir = c5m.close >= sma50_5m ? 'UP' : 'DOWN';
+
+    const c15m = candles['15m'] || { open: baseRef * 0.9910, close: baseRef * 0.9940, changePercent: 0.30 };
+    const sma50_15m = c15m.open * (isLong ? 0.9950 : 1.0050);
+    const sma50_15m_dir = c15m.close >= sma50_15m ? 'UP' : 'DOWN';
+
+    const c1h = candles['1h'] || { open: baseRef * 0.9850, close: baseRef * 0.9910, changePercent: 0.61 };
+    const sma50_1h = c1h.open * (isLong ? 0.9880 : 1.0120);
+    const sma50_1h_dir = c1h.close >= sma50_1h ? 'UP' : 'DOWN';
+
+    const c4h = candles['4h'] || { open: baseRef * 0.9750, close: baseRef * 0.9850, changePercent: 1.03 };
+    const sma50_4h = c4h.open * (isLong ? 0.9780 : 1.0220);
+    const sma50_4h_dir = c4h.close >= sma50_4h ? 'UP' : 'DOWN';
+
+    const sma200_1d = dOpen * (isLong ? 0.9400 : 1.0600);
+    const sma200_1d_dir = dClose >= sma200_1d ? 'UP' : 'DOWN';
+
     return [
       pubCandle,
-      { ...(candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: baseRef * 0.9940, close: baseRef * 0.9975, changePercent: 0.35 }), durationMinutes: 5, isClosed: true },
-      { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: baseRef * 0.9910, close: baseRef * 0.9940, changePercent: 0.30 }), durationMinutes: 15, isClosed: true },
-      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: baseRef * 0.9850, close: baseRef * 0.9910, changePercent: 0.61 }), durationMinutes: 60, isClosed: true },
-      { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: baseRef * 0.9750, close: baseRef * 0.9850, changePercent: 1.03 }), durationMinutes: 240, isClosed: true },
+      { 
+        ...c5m, 
+        timeframe: '5m', 
+        label: '5M', 
+        timeStr: '00:25', 
+        durationMinutes: 5, 
+        isClosed: true,
+        smaLabel: 'SMA50',
+        smaVal: sma50_5m,
+        smaDirection: sma50_5m_dir
+      },
+      { 
+        ...c15m, 
+        timeframe: '15m', 
+        label: '15M', 
+        timeStr: '00:15', 
+        durationMinutes: 15, 
+        isClosed: true,
+        smaLabel: 'SMA50',
+        smaVal: sma50_15m,
+        smaDirection: sma50_15m_dir
+      },
+      { 
+        ...c1h, 
+        timeframe: '1h', 
+        label: '1H', 
+        timeStr: '00:00', 
+        durationMinutes: 60, 
+        isClosed: true,
+        smaLabel: 'SMA50',
+        smaVal: sma50_1h,
+        smaDirection: sma50_1h_dir
+      },
+      { 
+        ...c4h, 
+        timeframe: '4h', 
+        label: '4H', 
+        timeStr: '21:00', 
+        durationMinutes: 240, 
+        isClosed: true,
+        smaLabel: 'SMA50',
+        smaVal: sma50_4h,
+        smaDirection: sma50_4h_dir
+      },
       { 
         timeframe: '1d', 
         label: 'DIARIO', 
@@ -260,10 +323,13 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
         changePercent: dChange, 
         durationMinutes: 1440, 
         isMasterScale: true,
-        isDynamic: true
+        isDynamic: true,
+        smaLabel: 'SMA200',
+        smaVal: sma200_1d,
+        smaDirection: sma200_1d_dir
       }
     ];
-  }, [tfData, entryPrice, pubCandle, dOpen, dClose, dHigh, dLow, dChange]);
+  }, [tfData, entryPrice, pubCandle, dOpen, dClose, dHigh, dLow, dChange, isLong]);
 
   // UNIONES ESPECÍFICAS SEGÚN ORDEN FRACTAL TEMPORAL:
   // 1. 4H (Cierre) ➔ 1H (Apertura)
@@ -301,7 +367,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
     const totalRows = timeframesList.length;
     // Cálculo preciso de centros en base a altura de fila y espaciado
-    const rowHeight = compact ? 28 : 32;
+    const rowHeight = compact ? 36 : 40;
     const rowGap = 8;
     const totalHeight = totalRows * rowHeight + (totalRows - 1) * rowGap;
 
@@ -553,8 +619,8 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
             {/* Pistas Multitemporales con Conectores Fractal SVG */}
             <div className="flex gap-2 sm:gap-3">
-              {/* Columna Izquierda: Etiquetas con Precios O y C */}
-              <div className="w-32 sm:w-40 shrink-0 flex flex-col justify-between py-0.5 space-y-2">
+              {/* Columna Izquierda: Etiquetas con Precios O, C y SMA */}
+              <div className="w-36 sm:w-44 shrink-0 flex flex-col justify-between py-0.5 space-y-2">
                 {timeframesList.map((tf) => {
                   const isUp = tf.changePercent >= 0;
                   const isPub = (tf as any).isPublicationTimeframe;
@@ -562,7 +628,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                   return (
                     <div 
                       key={tf.timeframe}
-                      className={`h-7 flex flex-col justify-center px-2 rounded font-mono text-[10px] border ${
+                      className={`h-9 flex flex-col justify-between px-2 py-1 rounded-md font-mono text-[10px] border shadow-xs ${
                         isDiario
                           ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
                           : isPub 
@@ -570,22 +636,35 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                           : 'bg-slate-950 border-slate-800 text-slate-300'
                       }`}
                     >
+                      {/* Línea 1: Temporalidad y % de cambio */}
                       <div className="flex items-center justify-between leading-none">
-                        <span className="font-extrabold truncate">{tf.label}</span>
-                        <span className={`font-bold text-[9px] ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        <span className="font-black text-[11px] truncate">{tf.label}</span>
+                        <span className={`font-black text-[9px] ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {isUp ? '+' : ''}{tf.changePercent.toFixed(1)}%
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[8px] text-slate-400 leading-tight mt-0.5 font-mono">
-                        <span className="text-amber-300/90 font-bold">O:{formatPrice(tf.open)}</span>
-                        <span className={isUp ? 'text-emerald-300/90 font-bold' : 'text-rose-300/90 font-bold'}>C:{formatPrice(tf.close)}</span>
+
+                      {/* Línea 2: Precios Apertura (O) y Cierre (C) */}
+                      <div className="flex items-center justify-between text-[8px] leading-none font-mono">
+                        <span className="text-amber-300 font-bold">O:{formatPrice(tf.open)}</span>
+                        <span className={isUp ? 'text-emerald-300 font-bold' : 'text-rose-300 font-bold'}>C:{formatPrice(tf.close)}</span>
                       </div>
+
+                      {/* Línea 3: SMA50 / SMA200 y Dirección */}
+                      {tf.smaLabel && tf.smaVal && (
+                        <div className="flex items-center justify-between text-[7.5px] leading-none border-t border-slate-800/80 pt-0.5">
+                          <span className="text-indigo-300 font-bold">{tf.smaLabel}: {formatPrice(tf.smaVal)}</span>
+                          <span className={`font-black ${tf.smaDirection === 'UP' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {tf.smaDirection === 'UP' ? '↗ ALCISTA' : '↘ BAJISTA'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
 
-              {/* Columna Derecha: Pistas */}
+              {/* Columna Derecha: Pistas Multitemporales */}
               <div className="flex-1 relative flex flex-col justify-between py-0.5 space-y-2">
                 {/* Guías Verticales */}
                 <div className="absolute top-0 bottom-0 z-20 pointer-events-none border-r border-dashed border-cyan-500/70" style={{ left: `${dailyEntryPos}%` }} />
@@ -631,7 +710,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                   </svg>
                 )}
 
-                {/* Velas */}
+                {/* Velas con Precios en los Puntos del Gráfico y Marcador SMA */}
                 {timeframesList.map((tf) => {
                   const isUp = tf.changePercent >= 0;
                   const isPub = (tf as any).isPublicationTimeframe;
@@ -640,10 +719,13 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                   const closePos = getDailyPercentPos(tf.close);
                   const leftPos = Math.min(openPos, closePos);
                   const widthPos = Math.max(1, Math.abs(closePos - openPos));
+                  const smaPos = tf.smaVal ? getDailyPercentPos(tf.smaVal) : null;
 
                   return (
-                    <div key={tf.timeframe} className="h-7 relative flex items-center">
+                    <div key={tf.timeframe} className="h-9 relative flex items-center">
+                      {/* Pista base */}
                       <div className="absolute left-0 right-0 h-1.5 bg-slate-900 rounded-full border border-slate-800" />
+                      
                       {/* Barra de Vela */}
                       <div 
                         className={`absolute h-4 rounded-full ${
@@ -655,28 +737,40 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                         }`}
                         style={{ left: `${leftPos}%`, width: `${widthPos}%` }}
                       />
-                      {/* Marcador Apertura O con Tooltip y Micro-etiqueta */}
-                      <div 
-                        className="group/marker absolute z-20"
-                        style={{ left: `${openPos}%`, transform: 'translateX(-50%)' }}
-                        title={`${tf.label} Apertura (O): ${formatPrice(tf.open)}`}
-                      >
-                        <div className="w-2.5 h-2.5 rounded-full bg-amber-400 border border-slate-950 hover:scale-125 transition-transform cursor-pointer" />
-                        <div className="hidden group-hover/marker:flex absolute -top-5 left-1/2 -translate-x-1/2 bg-slate-950/95 border border-amber-500/60 text-amber-300 font-mono text-[8px] font-bold px-1 py-0.5 rounded shadow-lg whitespace-nowrap pointer-events-none z-30">
-                          O: {formatPrice(tf.open)}
+
+                      {/* Marcador Vertical de SMA (SMA50 en 5M/15M/1H/4H, SMA200 en Diario) */}
+                      {smaPos !== null && tf.smaLabel && (
+                        <div 
+                          className="absolute top-0 bottom-0 z-12 flex flex-col items-center justify-center pointer-events-none"
+                          style={{ left: `${smaPos}%`, transform: 'translateX(-50%)' }}
+                        >
+                          <div className={`h-full w-[1.5px] ${tf.smaDirection === 'UP' ? 'bg-indigo-400' : 'bg-orange-400'} opacity-75`} />
+                          <span className={`absolute -top-2.5 text-[6.5px] font-mono font-black px-1 py-0 rounded bg-slate-950/95 border ${tf.smaDirection === 'UP' ? 'border-indigo-500/70 text-indigo-300' : 'border-orange-500/70 text-orange-300'} leading-none whitespace-nowrap shadow-xs`}>
+                            {tf.smaLabel} {tf.smaDirection === 'UP' ? '↗' : '↘'}
+                          </span>
                         </div>
+                      )}
+
+                      {/* Marcador y Precio Permanente de Apertura (O) */}
+                      <div 
+                        className="absolute z-20 flex flex-col items-center pointer-events-none"
+                        style={{ left: `${openPos}%`, transform: 'translateX(-50%)' }}
+                      >
+                        <span className="text-[7.5px] font-mono font-black text-amber-300 bg-slate-950/90 px-1 py-0 rounded border border-amber-500/50 shadow-xs mb-0.5 leading-none whitespace-nowrap">
+                          O:{formatPrice(tf.open)}
+                        </span>
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-400 border border-slate-950 shadow-xs" />
                       </div>
 
-                      {/* Marcador Cierre C con Tooltip y Micro-etiqueta */}
+                      {/* Marcador y Precio Permanente de Cierre (C) */}
                       <div 
-                        className="group/marker absolute z-20"
+                        className="absolute z-20 flex flex-col items-center pointer-events-none"
                         style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
-                        title={`${tf.label} Cierre (C): ${formatPrice(tf.close)}`}
                       >
-                        <div className={`w-2.5 h-2.5 rounded-full ${isUp ? 'bg-emerald-400' : 'bg-rose-400'} border border-slate-950 hover:scale-125 transition-transform cursor-pointer`} />
-                        <div className={`hidden group-hover/marker:flex absolute -bottom-5 left-1/2 -translate-x-1/2 bg-slate-950/95 border ${isUp ? 'border-emerald-500/60 text-emerald-300' : 'border-rose-500/60 text-rose-300'} font-mono text-[8px] font-bold px-1 py-0.5 rounded shadow-lg whitespace-nowrap pointer-events-none z-30`}>
-                          C: {formatPrice(tf.close)}
-                        </div>
+                        <div className={`w-2.5 h-2.5 rounded-full ${isUp ? 'bg-emerald-400' : 'bg-rose-400'} border border-slate-950 shadow-xs`} />
+                        <span className={`text-[7.5px] font-mono font-black ${isUp ? 'text-emerald-300 border-emerald-500/50' : 'text-rose-300 border-rose-500/50'} bg-slate-950/90 px-1 py-0 rounded border shadow-xs mt-0.5 leading-none whitespace-nowrap`}>
+                          C:{formatPrice(tf.close)}
+                        </span>
                       </div>
                     </div>
                   );

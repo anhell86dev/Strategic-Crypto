@@ -20,7 +20,8 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  Activity
+  Activity,
+  Clock
 } from 'lucide-react';
 
 interface TopGreenOpportunitiesProps {
@@ -625,12 +626,24 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           </span>
                         </div>
 
-                        {/* Línea 3: ESTRATEGIA */}
-                        <div className="text-[11px] font-bold text-slate-300 truncate max-w-[210px] uppercase tracking-wide">
-                          {displayStrategyName}
+                        {/* Línea 3: ESTRATEGIA y su ESTADO según Google Sheets hoja estrategia */}
+                        <div className="flex items-center gap-1.5 flex-wrap max-w-[230px]">
+                          <span className="text-[11px] font-bold text-slate-300 truncate max-w-[140px] uppercase tracking-wide">
+                            {displayStrategyName}
+                          </span>
+                          <span className={`inline-flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded uppercase border shadow-xs ${
+                            (strat.statusSheetEstrategia || strat.status || 'Activa').toLowerCase().includes('activa')
+                              ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60'
+                              : (strat.statusSheetEstrategia || strat.status || '').toLowerCase().includes('pend')
+                              ? 'bg-amber-950 text-amber-300 border-amber-500/60'
+                              : 'bg-slate-900 text-slate-300 border-slate-700'
+                          }`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                            <span>{strat.statusSheetEstrategia || strat.status || 'Activa'}</span>
+                          </span>
                         </div>
 
-                        {/* Línea 4: R:B */}
+                        {/* Línea 4: R:B (arriba de la hora) */}
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span 
                             title={`Ratio Riesgo/Beneficio: 1:${rb.toFixed(2)}`}
@@ -638,6 +651,20 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           >
                             <Scale className="w-3 h-3 text-purple-300" />
                             <span>R:B 1:{rb.toFixed(2)}</span>
+                          </span>
+                        </div>
+
+                        {/* Línea 5: HORA de Publicación */}
+                        <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono font-medium">
+                          <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                          <span>
+                            {(() => {
+                              const match = (strat.strategyName || '').match(/_(\d{2})[-/.](\d{2})[-/.](\d{2,4})_(\d{2}:\d{2})/);
+                              if (match) {
+                                return `Hora: ${match[4]} (${match[1]}/${match[2]})`;
+                              }
+                              return strat.date ? `Hora: ${strat.date}` : 'Hora: 00:00';
+                            })()}
                           </span>
                         </div>
                       </div>
