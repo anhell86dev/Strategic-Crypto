@@ -192,18 +192,12 @@ class BinanceWsManager {
 
     this.setStatus('connecting');
 
-    // Build multiplexed streams
+    // Build multiplexed streams (optimized to ticker and 5m kline to stay well within stream/URL limits)
     const streamNames: string[] = [];
     this.subscribedSymbols.forEach(sym => {
       const lower = sym.toLowerCase();
       streamNames.push(`${lower}@ticker`);
-      streamNames.push(`${lower}@bookTicker`);
-      streamNames.push(`${lower}@kline_1m`);
       streamNames.push(`${lower}@kline_5m`);
-      streamNames.push(`${lower}@kline_15m`);
-      streamNames.push(`${lower}@kline_1h`);
-      streamNames.push(`${lower}@kline_1d`);
-      streamNames.push(`${lower}@depth20@100ms`);
     });
 
     const streamParam = streamNames.join('/');

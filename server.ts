@@ -444,6 +444,33 @@ app.get('/api/binance/klines', async (req: Request, res: Response) => {
   return res.status(502).json({ ok: false, error: 'No se pudieron obtener klines de Binance', data: [] });
 });
 
+// 4b. GET /api/binance/ticker/24hr - Public Ticker Proxy (Avoids CORS / Rate limits)
+app.get('/api/binance/ticker/24hr', async (_req: Request, res: Response) => {
+  const hosts = [
+    'https://fapi.binance.com/fapi/v1/ticker/24hr',
+    'https://api.binance.com/api/v3/ticker/24hr',
+    'https://data-api.binance.vision/api/v3/ticker/24hr'
+  ];
+
+  for (const targetUrl of hosts) {
+    try {
+      const response = await fetch(targetUrl, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return res.json({ ok: true, data });
+        }
+      }
+    } catch (e) {
+      // try next host
+    }
+  }
+
+  return res.status(502).json({ ok: false, error: 'No se pudieron obtener tickers de Binance', data: [] });
+});
+
 // 5. GET /api/binance/futures/orders
 app.get('/api/binance/futures/orders', async (req: Request, res: Response) => {
   const creds = await getBinanceCredentials(req);

@@ -514,14 +514,12 @@ export class StrategyAnalyzerService {
   }
 
   /**
-   * Returns the Top N strategies with VERDE traffic light, ordered by:
-   * 1. Válidas en Zona
-   * 2. Mejor R:B
-   * 3. Mejor Confluencia
+   * Returns the Top N best strategies of the ENTIRE catalog (without traffic light filtering),
+   * ordered by composite rank score: Confluencia (40%), Ratio R:B (35%), Proximidad / Zona DCA (25%).
    */
   public static getTopGreenStrategies(strategies: StrategyWithOrders[], limit = 5): StrategyWithOrders[] {
     return [...strategies]
-      .filter(s => s.trafficLight?.status === 'VERDE')
+      .filter(s => s.status !== 'RETIRADA' && s.status !== 'INACTIVA' && s.status !== 'BORRADA')
       .sort((a, b) => {
         const scoreA = a.trafficLight?.rankScore || 0;
         const scoreB = b.trafficLight?.rankScore || 0;

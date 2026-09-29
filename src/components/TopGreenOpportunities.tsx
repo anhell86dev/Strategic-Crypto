@@ -251,15 +251,15 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2 font-mono">
-                TOP 5 OPORTUNIDADES · SEMÁFORO VERDE 🟢
+                TOP 5 MEJORES OPORTUNIDADES DEL CATÁLOGO 🏆
               </h3>
               <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950 border border-emerald-400 text-xs font-black text-emerald-300 uppercase tracking-wider font-mono shadow-sm">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                VÁLIDAS EN ZONA · MEJOR R:B · MEJOR CONFLUENCIA
+                MEJORES 5 DE TODO EL CATÁLOGO (SIN FILTROS)
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              Top 5 oportunidades clasificadas por <strong>Confluencia Técnica</strong> (40%), <strong>Ratio R:B</strong> (35%) y <strong>Activación en Zona DCA</strong> (25%).
+              Top 5 mejores oportunidades evaluadas sobre la totalidad del catálogo, ordenadas por <strong>Confluencia Técnica</strong> (40%), <strong>Ratio R:B</strong> (35%) y <strong>Activación en Zona DCA</strong> (25%).
             </p>
           </div>
         </div>
@@ -313,14 +313,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
           {/* Table Header */}
           <thead>
             <tr className="border-b border-emerald-500/30 text-xs font-black text-slate-200 uppercase tracking-wider bg-slate-950/90">
-              <th rowSpan={2} className="py-1.5 px-2 text-center w-14 border-r border-slate-800">Rank</th>
-              <th rowSpan={2} className="py-1.5 px-2.5 border-r border-slate-800 w-60 max-w-[240px]">
+              <th rowSpan={2} className="py-2 px-2 text-center w-16 min-w-[60px] border-r border-slate-800">Rank</th>
+              <th rowSpan={2} className="py-2 px-2.5 border-r border-slate-800 w-60 min-w-[230px] max-w-[250px]">
                 Par / Dirección / Precio Live
               </th>
-              <th rowSpan={2} className="py-1.5 px-2 w-32 border-r border-slate-800 text-center">Semáforo / Conf.</th>
+              <th rowSpan={2} className="py-2 px-2 w-32 min-w-[125px] border-r border-slate-800 text-center">Semáforo / Conf.</th>
 
               {/* Group 2: Entradas DCA */}
-              <th colSpan={3} className="py-1.5 px-2 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
+              <th colSpan={3} className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
                 <div className="flex items-center justify-center gap-2">
                   <span>Entradas DCA (Precio, Inv $ & Activos · 5x)</span>
                   <button 
@@ -334,7 +334,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               </th>
 
               {/* Group 3: Take Profit */}
-              <th colSpan={3} className="py-1.5 px-2 text-center text-emerald-300 bg-emerald-950/80 border-b border-emerald-700/60">
+              <th colSpan={3} className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/80 border-b border-emerald-700/60">
                 Take Profit (TP1, TP2, TP3)
               </th>
             </tr>
@@ -342,19 +342,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
             {/* Sub-Headers Row 2 */}
             <tr className="border-b-2 border-emerald-500/40 text-[11px] font-black uppercase tracking-wider bg-slate-950">
               {/* DCA Sub-headers (inverted: E3, E2, E1) */}
-              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[100px]">
+              <th className="py-1.5 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 w-32 min-w-[120px]">
                 <div className="flex flex-col items-center">
                   <span>E3</span>
                   <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / inv $ / act</span>
                 </div>
               </th>
-              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[100px]">
+              <th className="py-1.5 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 w-32 min-w-[120px]">
                 <div className="flex flex-col items-center">
                   <span>E2</span>
                   <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / inv $ / act</span>
                 </div>
               </th>
-              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800 min-w-[100px]">
+              <th className="py-1.5 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800 w-32 min-w-[120px]">
                 <div className="flex flex-col items-center">
                   <span>E1</span>
                   <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / inv $ / act</span>
@@ -362,19 +362,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               </th>
 
               {/* Take Profit Sub-headers (precio / % de cierre de activos) */}
-              <th className="py-1 px-1.5 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[90px]">
+              <th className="py-1.5 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 w-32 min-w-[115px]">
                 <div className="flex flex-col items-center">
                   <span>TP1</span>
                   <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / % act</span>
                 </div>
               </th>
-              <th className="py-1 px-1.5 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[90px]">
+              <th className="py-1.5 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 w-32 min-w-[115px]">
                 <div className="flex flex-col items-center">
                   <span>TP2</span>
                   <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / % act</span>
                 </div>
               </th>
-              <th className="py-1 px-1.5 text-center text-emerald-300 bg-emerald-950/40 min-w-[90px]">
+              <th className="py-1.5 px-2 text-center text-emerald-300 bg-emerald-950/40 w-32 min-w-[115px]">
                 <div className="flex flex-col items-center">
                   <span>TP3</span>
                   <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / % act</span>
@@ -1309,38 +1309,33 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
                   </tr>
 
-                  {/* Fila 2: Stop Loss Global cubriendo las 3 Entradas DCA (E3, E2, E1) con SL GLOBAL en Celda 1 y Precio + % + $ unificados en Celda 2 */}
+                  {/* Fila 2: Stop Loss Global Unificado cubriendo las 3 Entradas DCA (E3, E2, E1) con colSpan=3 */}
                   <tr
                     onClick={() => onSelectStrategy && onSelectStrategy(strat)}
-                    className="transition-colors duration-200 cursor-pointer bg-slate-950/40"
+                    className="transition-colors duration-200 cursor-pointer bg-slate-950/60"
                   >
-                    {/* Celda 1 (Bajo DCA E3): "SL GLOBAL" */}
-                    <td className="relative py-1 px-1.5 text-center bg-rose-950/40 border-r border-rose-900/40 border-t border-rose-900/40 font-mono">
-                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                    <td colSpan={3} className="relative py-1.5 px-3 text-center bg-gradient-to-r from-rose-950/80 via-rose-900/60 to-rose-950/80 border-r border-slate-800 border-t border-rose-800/60 font-mono shadow-inner">
+                      {/* Badge de Paso Tocado en Esquina Superior */}
                       {stepMap.sl && (
                         <div 
-                          className="absolute top-0.5 right-0.5 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-rose-400 text-rose-200 font-mono shadow-lg shadow-black/80 ring-1 ring-rose-400/50"
+                          className="absolute top-0.5 right-1 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-rose-400 text-rose-200 font-mono shadow-lg ring-1 ring-rose-400/50"
                           title={`Paso #${stepMap.sl.step} ejecutado a las ${stepMap.sl.time}`}
                         >
-                          <span className="text-xs sm:text-sm font-black text-rose-300 leading-none">#{stepMap.sl.step}</span>
+                          <span className="text-xs font-black text-rose-300 leading-none">#{stepMap.sl.step}</span>
                           <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.sl.time}</span>
                         </div>
                       )}
-                      <div className="flex flex-col items-center justify-center gap-0.5">
-                        <div className="flex items-center justify-center gap-1 text-[10px] font-black text-rose-300 uppercase tracking-wider">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0" />
+                      <div className="flex items-center justify-between gap-2 px-1">
+                        <div className="flex items-center gap-1.5 text-[10px] font-black text-rose-300 uppercase tracking-wider shrink-0">
+                          <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse shrink-0" />
                           <span>SL GLOBAL</span>
                         </div>
-                      </div>
-                    </td>
-
-                    {/* Celda 2 (Bajo DCA E2 y E1 Unificada): PRECIO arriba, % y $ abajo */}
-                    <td colSpan={2} className="py-1 px-2 text-center bg-rose-950/20 border-r border-slate-800 border-t border-rose-900/40 font-mono">
-                      <div className="flex flex-col items-center justify-center gap-0.5">
-                        <span className="text-white font-black text-xs font-mono">{formatPrice(slPrice)}</span>
-                        <div className="flex items-center justify-center gap-1.5 text-[10px] font-mono font-bold">
-                          <span className="text-rose-300 font-black">{slDiffPctStr}</span>
-                          <span className="text-rose-400 font-bold">-${activeLoss > 0 ? activeLoss.toFixed(2) : '0.00'}</span>
+                        <div className="flex items-center gap-1.5 font-mono">
+                          <span className="text-white font-black text-xs sm:text-sm">{formatPrice(slPrice)}</span>
+                          <span className="text-rose-300 font-bold text-xs">({slDiffPctStr})</span>
+                        </div>
+                        <div className="text-rose-400 font-black text-xs font-mono shrink-0">
+                          -${activeLoss > 0 ? activeLoss.toFixed(2) : '0.00'}
                         </div>
                       </div>
                     </td>
@@ -1424,8 +1419,8 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               : 'hover:bg-slate-900/80 bg-slate-950/40'
                           }`}
                         >
-                          {/* Cols 1 to 5: Reglas del Trading (Límite estricto dentro de columnas 1 a 5 sin pasar hacia el gráfico) */}
-                          <td colSpan={5} className="py-2 px-3 border-r border-slate-800 bg-slate-950/95 font-sans border-t-0 align-middle">
+                          {/* Cols 1 to 4: Reglas del Trading */}
+                          <td colSpan={4} className="py-2 px-3 border-r border-slate-800 bg-slate-950/95 font-sans border-t-0 align-middle">
                             <div className="flex flex-col gap-2 w-full max-w-full">
                               {/* Línea 1: Badge de Reglas + Texto explicativo completo */}
                               <div className="flex items-start gap-2 flex-wrap">
@@ -1438,7 +1433,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                                 </span>
                               </div>
 
-                              {/* Línea 2: Disciplina Morada (Enmarcada dentro del ancho de las 5 columnas sin pasar hacia el gráfico) */}
+                              {/* Línea 2: Disciplina Morada */}
                               {strat.tradeDiscipline && (
                                 <div className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-950/80 border border-purple-500/50 text-purple-200 text-xs font-mono shadow-xs w-full whitespace-normal break-words leading-relaxed">
                                   <span className="shrink-0 text-amber-300 font-bold">⚡</span>
@@ -1448,8 +1443,8 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             </div>
                           </td>
 
-                          {/* Cols 6 to 11: Barra Horizontal de Precios Multitemporal Compacta con botón de expansión */}
-                          <td colSpan={6} className="py-2 px-3 border-r border-slate-800 bg-slate-950 font-mono border-t-0 align-middle">
+                          {/* Cols 5 to 9: Barra Horizontal de Precios Multitemporal Compacta */}
+                          <td colSpan={5} className="py-2 px-3 border-r border-slate-800 bg-slate-950 font-mono border-t-0 align-middle">
                             <HorizontalPriceScaleBar strategy={stratWithUpdatedTps} compact={true} defaultExpanded={false} />
                           </td>
                         </tr>
@@ -1457,7 +1452,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                         {/* Separador Visual Grueso y Espacioso entre Estrategias */}
                         {idx < topStrategies.length - 1 && (
                           <tr className="h-6 bg-slate-950 pointer-events-none select-none border-y-2 border-slate-800/80">
-                            <td colSpan={11} className="p-0 bg-slate-950">
+                            <td colSpan={9} className="p-0 bg-slate-950">
                               <div className="h-6 w-full flex items-center justify-between px-6 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950">
                                 <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
                                 <div className="px-4 text-[10px] font-mono font-black text-cyan-300 uppercase tracking-widest flex items-center gap-2">

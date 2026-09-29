@@ -117,46 +117,66 @@ class BinanceStreamManager {
 
   public async fetchRestSnapshot() {
     if (this.symbols.size === 0) return;
+    
+    let tickerData: any[] = [];
+    
+    // 1. Try local server proxy endpoint first (bypasses CORS & geoblocks)
     try {
-      const apiKey = proxyService.getBinanceApiKey();
-      const headers: Record<string, string> = {};
-      if (apiKey) {
-        headers['X-MBX-APIKEY'] = apiKey;
+      const res = await fetch('/api/binance/ticker/24hr');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok && Array.isArray(json.data)) {
+          tickerData = json.data;
+        }
       }
+    } catch {
+      // ignore
+    }
 
-      // Binance USDⓈ-M Futures 24hr ticker endpoint
-      const response = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr', { headers });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        data.forEach((item: any) => {
-          const sym = (item.symbol || '').toUpperCase();
-          if (this.symbols.has(sym)) {
-            this.handleTickerPayload({
-              s: sym,
-              c: item.lastPrice,
-              p: item.priceChange,
-              P: item.priceChangePercent,
-              h: item.highPrice,
-              l: item.lowPrice,
-              v: item.volume
-            });
-          }
-        });
+    // 2. Direct fallback if proxy returned empty
+    if (!tickerData || tickerData.length === 0) {
+      try {
+        const apiKey = proxyService.getBinanceApiKey();
+        const headers: Record<string, string> = {};
+        if (apiKey) {
+          headers['X-MBX-APIKEY'] = apiKey;
+        }
+
+        const response = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr', { headers });
+        if (response.ok) {
+          tickerData = await response.json();
+        }
+      } catch (e) {
+        console.warn('REST USD-M Futures snapshot fallback warning:', e);
       }
-    } catch (e) {
-      console.warn('REST USD-M Futures snapshot fallback warning:', e);
+    }
+
+    if (Array.isArray(tickerData) && tickerData.length > 0) {
+      tickerData.forEach((item: any) => {
+        const sym = (item.symbol || '').toUpperCase();
+        if (this.symbols.has(sym)) {
+          this.handleTickerPayload({
+            s: sym,
+            c: item.lastPrice || item.price,
+            p: item.priceChange,
+            P: item.priceChangePercent,
+            h: item.highPrice || item.high,
+            l: item.lowPrice || item.low,
+            v: item.volume
+          });
+        }
+      });
     }
   }
 
   private startRestPolling() {
     if (this.restPollTimer) return;
+    // Initial fetch immediately
+    this.fetchRestSnapshot();
+    // Continuous polling every 3.5 seconds as guaranteed backup stream
     this.restPollTimer = setInterval(() => {
-      // If WebSocket is not connected, use REST polling every 4 seconds as safety net
-      if (this.status !== 'connected') {
-        this.fetchRestSnapshot();
-      }
-    }, 4000);
+      this.fetchRestSnapshot();
+    }, 3500);
   }
 
   public reconnect() {

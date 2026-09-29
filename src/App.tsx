@@ -139,7 +139,13 @@ export default function App() {
   // Update Binance subscribed stream symbols whenever strategies change
   useEffect(() => {
     if (strategies.length > 0) {
-      const symbols = Array.from(new Set(strategies.map(s => s.symbol.toUpperCase().trim())));
+      const symbols = Array.from(new Set(strategies.map(s => {
+        let sym = s.symbol.toUpperCase().trim().replace('/', '');
+        if (!sym.endsWith('USDT') && !sym.endsWith('BUSD') && !sym.endsWith('USDC')) {
+          sym += 'USDT';
+        }
+        return sym;
+      })));
       binanceStream.setSymbols(symbols);
     }
   }, [strategies]);
