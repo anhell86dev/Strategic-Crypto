@@ -108,6 +108,23 @@ export const KNOWN_ACTIVE_ESTRATEGIA_NAMES: string[] = [
   "TIA_RANGO_28-09-26_05:40"
 ];
 
+export interface EstrategiaDetail {
+  code: string;
+  date?: string;
+  time?: string;
+  displayName?: string;
+  pair?: string;
+  timeframe?: string;
+  orderType?: string;
+  keyIndicators?: string;
+  entryRules?: string;
+  exitRules?: string;
+  riskManagement?: string;
+  commentsBacktesting?: string;
+  status?: string;
+  registrationTimestamp?: string;
+}
+
 export class SheetsService {
   public static getConfig(): SheetsConfig {
     try {
@@ -175,42 +192,127 @@ export class SheetsService {
   }
 
   /**
-   * Parses active strategy names from 'Estrategia' CSV text
+   * Mapea y extrae todos los títulos y campos detallados de la pestaña 'Estrategia'.
+   * Columnas analizadas:
+   * Col 0: Nombre Estrategia (Código / ID ej: AAVE_PULLBACK_...)
+   * Col 1: Fecha
+   * Col 2: Hora
+   * Col 3: Nombre de Estrategia (Título descriptivo ej: AAVE Pullback a Soporte...)
+   * Col 4: Par
+   * Col 5: Temporalidad (1D, 4h, 1h...)
+   * Col 6: Tipo de Orden (Limit, Market...)
+   * Col 7: Indicadores Clave (SMA-5, Estocástico, Bandas Bollinger...)
+   * Col 8: Reglas de Entrada
+   * Col 9: Reglas de Salida / TP
+   * Col 10: Gestión de Riesgo & Stop Loss
+   * Col 11: Comentarios / Backtesting
+   * Col 12: Estado (Activa, Inactiva...)
+   * Col 13: Fecha y Hora Registro
    */
-  public static parseActiveSetFromEstrategiaCsv(csvText: string): Set<string> {
-    const activeSet = new Set<string>();
-    if (!csvText || csvText.includes('<!DOCTYPE html>') || csvText.trim().length < 20) {
-      return activeSet;
+  public static parseEstrategiaDetailsMap(csvOrRows: string | string[][]): Map<string, EstrategiaDetail> {
+    const detailsMap = new Map<string, EstrategiaDetail>();
+    let rows: string[][] = [];
+    if (typeof csvOrRows === 'string') {
+      if (!csvOrRows || csvOrRows.includes('<!DOCTYPE html>') || csvOrRows.trim().length < 20) {
+        return detailsMap;
+      }
+      rows = this.parseCsvToRows(csvOrRows);
+    } else if (Array.isArray(csvOrRows)) {
+      rows = csvOrRows;
     }
-    const rows = this.parseCsvToRows(csvText);
-    if (rows.length <= 1) return activeSet;
+
+    if (rows.length <= 1) return detailsMap;
 
     const header = rows[0].map(h => (h || '').toLowerCase().trim());
-    let colName = 0;
-    let colStatus = 12; // Column M is 12 (0-indexed)
+    let colCode = 0;
+    let colDate = 1;
+    let colTime = 2;
+    let colTitle = 3;
+    let colPair = 4;
+    let colTf = 5;
+    let colOrderType = 6;
+    let colIndicators = 7;
+    let colEntry = 8;
+    let colExit = 9;
+    let colRisk = 10;
+    let colComments = 11;
+    let colStatus = 12;
+    let colTimestamp = 13;
+
     header.forEach((h, idx) => {
-      if (/nombre.*estrategia/i.test(h)) colName = idx;
-      else if (/^estado$/i.test(h)) colStatus = idx;
+      if (/^(nombre\s*estrategia|c[oó]digo.*estrategia|id.*estrategia)$/i.test(h)) colCode = idx;
+      else if (/^fecha$/i.test(h)) colDate = idx;
+      else if (/^hora$/i.test(h)) colTime = idx;
+      else if (/(nombre\s*de\s*estrategia|t[ií]tulo|descripci[oó]n)/i.test(h)) colTitle = idx;
+      else if (/^(par|activo|ticker|s[ií]mbolo|symbol)$/i.test(h)) colPair = idx;
+      else if (/(temporalidad|timeframe|^tf$)/i.test(h)) colTf = idx;
+      else if (/(tipo\s*de\s*orden|tipo\s*orden|order\s*type)/i.test(h)) colOrderType = idx;
+      else if (/(indicadores\s*clave|indicadores|key\s*indicators)/i.test(h)) colIndicators = idx;
+      else if (/(reglas.*entrada|entry\s*rules)/i.test(h)) colEntry = idx;
+      else if (/(reglas.*salida|reglas.*tp|exit\s*rules)/i.test(h)) colExit = idx;
+      else if (/(gesti[oó]n.*riesgo|risk\s*management|stop\s*loss)/i.test(h)) colRisk = idx;
+      else if (/(comentarios|backtesting|notas)/i.test(h)) colComments = idx;
+      else if (/^(estado|status)$/i.test(h)) colStatus = idx;
+      else if (/(fecha.*hora.*registro|fecha.*registro|timestamp|registro)/i.test(h)) colTimestamp = idx;
     });
 
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
-      if (!r || r.length <= colName) continue;
-      const name = (r[colName] || r[0] || '').trim().toLowerCase();
-      const status = (r[colStatus] || (r.length > 12 ? r[12] : '') || '').trim().toLowerCase();
-      // Only add if explicitly active and NOT inactiva/retirada/cerrada/pasada
-      if (name && status.includes('activa') && !status.includes('inactiva') && !status.includes('retirada') && !status.includes('cerrada') && !status.includes('pasada')) {
-        activeSet.add(name);
+      if (!r || r.length <= colCode) continue;
+      const code = (r[colCode] || r[0] || '').trim();
+      if (!code) continue;
+
+      const detail: EstrategiaDetail = {
+        code,
+        date: r[colDate] || '',
+        time: r[colTime] || '',
+        displayName: r[colTitle] || '',
+        pair: r[colPair] || '',
+        timeframe: r[colTf] || '1D',
+        orderType: r[colOrderType] || 'Limit',
+        keyIndicators: r[colIndicators] || '',
+        entryRules: r[colEntry] || '',
+        exitRules: r[colExit] || '',
+        riskManagement: r[colRisk] || '',
+        commentsBacktesting: r[colComments] || '',
+        status: (r[colStatus] || 'Activa').trim(),
+        registrationTimestamp: r[colTimestamp] || ''
+      };
+
+      const normCode = code.toLowerCase().trim();
+      detailsMap.set(normCode, detail);
+
+      const rawPair = (r[colPair] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (rawPair) {
+        detailsMap.set(rawPair.toLowerCase(), detail);
+        const withoutUsdt = rawPair.replace('USDT', '');
+        if (withoutUsdt) detailsMap.set(withoutUsdt.toLowerCase(), detail);
       }
     }
+
+    return detailsMap;
+  }
+
+  /**
+   * Helper de compatibilidad: extrae nombres de estrategias con estado 'Activa'
+   */
+  public static parseActiveSetFromEstrategiaCsv(csvText: string): Set<string> {
+    const detailsMap = this.parseEstrategiaDetailsMap(csvText);
+    const activeSet = new Set<string>();
+    detailsMap.forEach((detail, key) => {
+      const st = (detail.status || '').toLowerCase();
+      if (st.includes('activa') && !st.includes('inactiva') && !st.includes('retirada') && !st.includes('cerrada')) {
+        activeSet.add(key);
+        if (detail.code) activeSet.add(detail.code.toLowerCase().trim());
+      }
+    });
     return activeSet;
   }
 
   /**
-   * Fetches sheet 'Estrategia' to read Column M (Col 12: Estado).
-   * Returns a set of strategy names (in lowercase) that are marked 'Activa' (not 'Inactiva').
+   * Consulta la pestaña 'Estrategia' en vivo y devuelve el mapa completo de metadatos.
    */
-  public static async fetchEstrategiaActiveSet(spreadsheetId: string, apiKey?: string, forcePurgeCache: boolean = false): Promise<Set<string>> {
+  public static async fetchEstrategiaDetailsMap(spreadsheetId: string, apiKey?: string, forcePurgeCache: boolean = false): Promise<Map<string, EstrategiaDetail>> {
     const cacheBuster = `_cb=${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 
     // 1. Try GViz CSV export for sheet 'Estrategia'
@@ -227,7 +329,7 @@ export class SheetsService {
         });
         if (res.ok) {
           const csvText = await res.text();
-          const parsed = this.parseActiveSetFromEstrategiaCsv(csvText);
+          const parsed = this.parseEstrategiaDetailsMap(csvText);
           if (parsed.size > 0) return parsed;
         }
       } catch (e) {
@@ -247,28 +349,8 @@ export class SheetsService {
           const json = await res.json();
           const rows: string[][] = json.values || [];
           if (rows.length > 1) {
-            const activeSet = new Set<string>();
-            const header = rows[0].map(h => (h || '').toLowerCase().trim());
-            let colName = 0;
-            let colStatus = 12;
-            header.forEach((h, idx) => {
-              if (/nombre.*estrategia/i.test(h)) colName = idx;
-              else if (/^estado$/i.test(h)) colStatus = idx;
-            });
-
-            for (let i = 1; i < rows.length; i++) {
-              const r = rows[i];
-              if (!r || r.length <= colName) continue;
-              const name = (r[colName] || r[0] || '').trim().toLowerCase();
-              const status = (r[colStatus] || (r.length > 12 ? r[12] : '') || '').trim().toLowerCase();
-              if (name && status.includes('activa') && !status.includes('inactiva') && !status.includes('retirada') && !status.includes('cerrada')) {
-                activeSet.add(name);
-              }
-            }
-
-            if (activeSet.size > 0) {
-              return activeSet;
-            }
+            const parsed = this.parseEstrategiaDetailsMap(rows);
+            if (parsed.size > 0) return parsed;
           }
         }
       } catch (e) {
@@ -276,7 +358,7 @@ export class SheetsService {
       }
     }
 
-    return new Set<string>();
+    return new Map<string, EstrategiaDetail>();
   }
 
   /**
@@ -312,20 +394,20 @@ export class SheetsService {
       if (serverResp.ok) {
         const serverData = await serverResp.json();
         if (serverData.ok) {
-          // Extraer conjunto activo de la hoja Estrategia si vino
-          let activeSet: Set<string> | undefined = undefined;
+          // Extraer mapa de detalles de la hoja Estrategia
+          let estrategiaMap: Map<string, EstrategiaDetail> | undefined = undefined;
           if (serverData.estrategiaCsv) {
-            activeSet = this.parseActiveSetFromEstrategiaCsv(serverData.estrategiaCsv);
+            estrategiaMap = this.parseEstrategiaDetailsMap(serverData.estrategiaCsv);
           }
 
           let parsedResult: { strategies: Strategy[]; orders: TakeProfitOrder[] } | null = null;
           if (serverData.ordenesCsv) {
             const rows = this.parseCsvToRows(serverData.ordenesCsv);
             if (rows.length > 1) {
-              parsedResult = this.parseStrategiesSheetRows(rows, activeSet);
+              parsedResult = this.parseStrategiesSheetRows(rows, estrategiaMap);
             }
           } else if (serverData.values && Array.isArray(serverData.values) && serverData.values.length > 1) {
-            parsedResult = this.parseStrategiesSheetRows(serverData.values, activeSet);
+            parsedResult = this.parseStrategiesSheetRows(serverData.values, estrategiaMap);
           }
 
           if (parsedResult && parsedResult.strategies.length > 0) {
@@ -343,15 +425,14 @@ export class SheetsService {
       console.warn('[SheetsService] Server proxy live-data aviso:', e.message);
     }
 
-    // Consultar primero el estado de las estrategias en la Hoja: Estrategia, Columna M
-    const activeStrategySet = await this.fetchEstrategiaActiveSet(spreadsheetId, effectiveApiKey, forcePurgeCache);
+    // Consultar primero el mapa de detalles de la hoja Estrategia
+    const estrategiaDetailsMap = await this.fetchEstrategiaDetailsMap(spreadsheetId, effectiveApiKey, forcePurgeCache);
 
     // METHOD 1: Direct Google Sheets GViz CSV Export (tab Ordenes)
     if (spreadsheetId) {
       const csvUrlsToTry = [
         `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Ordenes')}&${cacheBuster}`,
-        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Órdenes')}&${cacheBuster}`,
-        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=0&${cacheBuster}`
+        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Órdenes')}&${cacheBuster}`
       ];
 
       for (const csvUrl of csvUrlsToTry) {
@@ -367,10 +448,11 @@ export class SheetsService {
 
           if (csvRes.ok) {
             const csvText = await csvRes.text();
-            if (csvText && !csvText.includes('<!DOCTYPE html>') && csvText.trim().length > 100) {
+            // Asegurar que es la hoja de órdenes
+            if (csvText && !csvText.includes('<!DOCTYPE html>') && csvText.trim().length > 100 && (csvText.includes('E1') || csvText.includes('Capital Asignado') || csvText.includes('Nombre Estrategia'))) {
               const rows = this.parseCsvToRows(csvText);
               if (rows.length > 1) {
-                const parsedResult = this.parseStrategiesSheetRows(rows, activeStrategySet);
+                const parsedResult = this.parseStrategiesSheetRows(rows, estrategiaDetailsMap);
                 if (parsedResult.strategies.length > 0) {
                   this.saveCustomData(parsedResult.strategies, parsedResult.orders);
                   return {
@@ -391,7 +473,7 @@ export class SheetsService {
 
     // METHOD 2: Google Sheets v4 REST API (if apiKey is configured)
     if (spreadsheetId && effectiveApiKey) {
-      for (const sheetName of SHEET_NAME_CANDIDATES) {
+      for (const sheetName of ['Ordenes', 'Órdenes', 'Orders', 'Sheet1']) {
         try {
           const cacheBuster = Date.now();
           const stratUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?key=${effectiveApiKey}&t=${cacheBuster}`;
@@ -402,7 +484,7 @@ export class SheetsService {
             const values = stratJson.values || [];
             
             if (values.length > 1) {
-              const parsedResult = this.parseStrategiesSheetRows(values, activeStrategySet);
+              const parsedResult = this.parseStrategiesSheetRows(values, estrategiaDetailsMap);
               if (parsedResult.strategies.length > 0) {
                 this.saveCustomData(parsedResult.strategies, parsedResult.orders);
                 return {
@@ -506,17 +588,17 @@ export class SheetsService {
   }
 
   /**
-   * Parses rows according to the official Ordenes dictionary:
-   * Col 0: Nombre Estrategia
+   * Mapea y procesa filas según el diccionario oficial y títulos actualizados de 'Ordenes':
+   * Col 0: Nombre Estrategia (Código único)
    * Col 1: Fecha / Hora (GMT-6)
-   * Col 2: Activo
+   * Col 2: Activo / Par
    * Col 3: Capital Asignado
-   * Col 4: Mercado
-   * Col 5: Margen
-   * Col 6: Apalancamiento
+   * Col 4: Mercado (Binance Futuros)
+   * Col 5: Margen (Aislado)
+   * Col 6: Apalancamiento (5X)
    * Col 7: Valor Nominal
-   * Col 8: Tipo
-   * Col 9: Estrategia
+   * Col 8: Tipo (Long / Short)
+   * Col 9: Estrategia / Categoría
    * Col 10: Escenario Principal
    * Col 11: E1
    * Col 12: % E1
@@ -547,17 +629,21 @@ export class SheetsService {
    * Col 37: Reglas de Ejecución Táctica
    * Col 38: Disciplina del Trade
    * Col 39: Estado
+   * Col 40: Fecha y Hora Registro
    */
-  public static parseStrategiesSheetRows(rows: string[][], activeStrategySet?: Set<string>): {
+  public static parseStrategiesSheetRows(
+    rows: string[][], 
+    estrategiaSource?: Map<string, EstrategiaDetail> | Set<string>
+  ): {
     strategies: Strategy[];
     orders: TakeProfitOrder[];
   } {
     if (!rows || rows.length <= 1) return { strategies: [], orders: [] };
 
-    // Inspect headers to find any offset
+    // Inspect headers
     const headerRow = rows[0].map(h => (h || '').toString().toLowerCase().trim());
 
-    // Locate base columns
+    // Defaults based on the updated Google Sheets structure
     let colName = 0;
     let colDate = 1;
     let colAsset = 2;
@@ -598,50 +684,79 @@ export class SheetsService {
     let colTactical = 37;
     let colDiscipline = 38;
     let colStatus = 39;
+    let colTimestamp = 40;
 
-    // Dynamic header check
+    // Detección dinámica y tolerante a cambios de nombres en títulos
     headerRow.forEach((h, idx) => {
-      if (/nombre.*estrategia/i.test(h)) colName = idx;
-      else if (/fecha/i.test(h)) colDate = idx;
-      else if (/^activo$/i.test(h)) colAsset = idx;
-      else if (/capital.*asignado/i.test(h)) colCapital = idx;
-      else if (/^mercado$/i.test(h)) colMarket = idx;
-      else if (/^margen$/i.test(h)) colMargin = idx;
-      else if (/apalancamiento/i.test(h)) colLev = idx;
-      else if (/valor.*nominal/i.test(h)) colNominal = idx;
-      else if (/^tipo$/i.test(h)) colType = idx;
-      else if (/^estrategia$/i.test(h)) colStrategy = idx;
-      else if (/escenario.*principal/i.test(h)) colScenario = idx;
-      else if (/^e1$/i.test(h)) colE1 = idx;
-      else if (/%\s*e1/i.test(h)) colE1Pct = idx;
-      else if (/unidades.*e1/i.test(h)) colE1Units = idx;
-      else if (/^e2$/i.test(h)) colE2 = idx;
-      else if (/%\s*e2/i.test(h)) colE2Pct = idx;
-      else if (/unidades.*e2/i.test(h)) colE2Units = idx;
-      else if (/^e3$/i.test(h)) colE3 = idx;
-      else if (/%\s*e3/i.test(h)) colE3Pct = idx;
-      else if (/unidades.*e3/i.test(h)) colE3Units = idx;
-      else if (/promedio.*e1/i.test(h)) colAvgE1 = idx;
-      else if (/promedio.*e2/i.test(h)) colAvgE2 = idx;
-      else if (/promedio.*e3/i.test(h)) colAvgE3 = idx;
-      else if (/stop.*loss/i.test(h) && !h.includes('%')) colSL = idx;
-      else if (/stop.*loss.*%/i.test(h)) colSLPct = idx;
-      else if (/loss.*capa.*1/i.test(h)) colLoss1 = idx;
-      else if (/loss.*capa.*2/i.test(h)) colLoss2 = idx;
-      else if (/loss.*capa.*3/i.test(h)) colLoss3 = idx;
-      else if (/^tp1$/i.test(h)) colTP1 = idx;
-      else if (/%\s*tp1/i.test(h)) colTP1Pct = idx;
-      else if (/profit.*capa.*1/i.test(h)) colProfit1 = idx;
-      else if (/^tp2$/i.test(h)) colTP2 = idx;
-      else if (/%\s*tp2/i.test(h)) colTP2Pct = idx;
-      else if (/profit.*capa.*2/i.test(h)) colProfit2 = idx;
-      else if (/^tp3$/i.test(h)) colTP3 = idx;
-      else if (/%\s*tp3/i.test(h)) colTP3Pct = idx;
-      else if (/profit.*capa.*3/i.test(h)) colProfit3 = idx;
-      else if (/reglas.*ejecuci[oó]n/i.test(h)) colTactical = idx;
-      else if (/disciplina/i.test(h)) colDiscipline = idx;
-      else if (/^estado$/i.test(h)) colStatus = idx;
+      // 0. Código / Nombre Estrategia
+      if (/^(nombre\s*estrategia|c[oó]digo.*estrategia|id.*estrategia|strategy\s*name)$/i.test(h)) colName = idx;
+      // 1. Fecha / Hora
+      else if (/(fecha\s*[\/\-]?\s*hora|date.*time|^fecha$)/i.test(h) && !h.includes('registro')) colDate = idx;
+      // 2. Activo
+      else if (/^(activo|par|ticker|moneda|symbol|s[ií]mbolo)$/i.test(h)) colAsset = idx;
+      // 3. Capital Asignado
+      else if (/(capital\s*asignado|capital|margen\s*asignado)/i.test(h)) colCapital = idx;
+      // 4. Mercado
+      else if (/^(mercado|exchange|market)$/i.test(h)) colMarket = idx;
+      // 5. Margen
+      else if (/(^margen$|modalidad.*margen|tipo.*margen|margin\s*type)/i.test(h)) colMargin = idx;
+      // 6. Apalancamiento
+      else if (/(apalancamiento|leverage|^lev$)/i.test(h)) colLev = idx;
+      // 7. Valor Nominal
+      else if (/(valor.*nominal|nominal|tama[ñn]o.*posici[oó]n|position\s*size)/i.test(h)) colNominal = idx;
+      // 8. Tipo / Dirección
+      else if (/^(tipo|direcci[oó]n|direccion|side|operaci[oó]n|operacion|direction)$/i.test(h)) colType = idx;
+      // 9. Estrategia / Categoría
+      else if (/^(estrategia|categor[ií]a|setup|patr[oó]n|tipo\s*estrategia)$/i.test(h)) colStrategy = idx;
+      // 10. Escenario Principal
+      else if (/(escenario\s*principal|escenario|tesis|notas\s*escenario)/i.test(h)) colScenario = idx;
+      // 11-13. E1, % E1, Cantidad Unidades E1
+      else if (/^(e1|entrada\s*1|precio\s*e1|entry\s*1)$/i.test(h)) colE1 = idx;
+      else if (/(%\s*e1|e1\s*%|asignaci[oó]n\s*e1|porcentaje\s*e1)/i.test(h)) colE1Pct = idx;
+      else if (/(unidades.*e1|cantidad.*e1|qty.*e1)/i.test(h)) colE1Units = idx;
+      // 14-16. E2, % E2, Cantidad Unidades E2
+      else if (/^(e2|entrada\s*2|precio\s*e2|entry\s*2)$/i.test(h)) colE2 = idx;
+      else if (/(%\s*e2|e2\s*%|asignaci[oó]n\s*e2|porcentaje\s*e2)/i.test(h)) colE2Pct = idx;
+      else if (/(unidades.*e2|cantidad.*e2|qty.*e2)/i.test(h)) colE2Units = idx;
+      // 17-19. E3, % E3, Cantidad Unidades E3
+      else if (/^(e3|entrada\s*3|precio\s*e3|entry\s*3)$/i.test(h)) colE3 = idx;
+      else if (/(%\s*e3|e3\s*%|asignaci[oó]n\s*e3|porcentaje\s*e3)/i.test(h)) colE3Pct = idx;
+      else if (/(unidades.*e3|cantidad.*e3|qty.*e3)/i.test(h)) colE3Units = idx;
+      // 20-22. Promedios
+      else if (/(promedio.*e1|avg.*e1)/i.test(h)) colAvgE1 = idx;
+      else if (/(promedio.*e2|avg.*e2)/i.test(h)) colAvgE2 = idx;
+      else if (/(promedio.*e3|avg.*e3|break\s*-?\s*even)/i.test(h)) colAvgE3 = idx;
+      // 23-24. Stop Loss
+      else if (/stop.*loss.*%/i.test(h) || /sl\s*%/i.test(h) || /%\s*sl/i.test(h)) colSLPct = idx;
+      else if (/^(stop\s*-?\s*loss|sl|precio\s*sl|stoploss)$/i.test(h) || (/stop.*loss/i.test(h) && !h.includes('%') && !h.includes('capa'))) colSL = idx;
+      // 25-27. Loss Capas
+      else if (/(loss.*capa.*1|p[eé]rdida.*capa.*1|p[eé]rdida.*e1|loss.*1)/i.test(h)) colLoss1 = idx;
+      else if (/(loss.*capa.*2|p[eé]rdida.*capa.*2|p[eé]rdida.*e2|loss.*2)/i.test(h)) colLoss2 = idx;
+      else if (/(loss.*capa.*3|p[eé]rdida.*capa.*3|p[eé]rdida.*e3|loss.*3|p[eé]rdida.*m[aá]xima)/i.test(h)) colLoss3 = idx;
+      // 28-30. TP1
+      else if (/(%\s*tp1|tp1\s*%|asignaci[oó]n\s*tp1|porcentaje\s*tp1)/i.test(h)) colTP1Pct = idx;
+      else if (/(profit.*capa.*1|ganancia.*capa.*1|profit.*1)/i.test(h)) colProfit1 = idx;
+      else if (/^(tp1|take\s*profit\s*1|objetivo\s*1|target\s*1)$/i.test(h)) colTP1 = idx;
+      // 31-33. TP2
+      else if (/(%\s*tp2|tp2\s*%|asignaci[oó]n\s*tp2|porcentaje\s*tp2)/i.test(h)) colTP2Pct = idx;
+      else if (/(profit.*capa.*2|ganancia.*capa.*2|profit.*2)/i.test(h)) colProfit2 = idx;
+      else if (/^(tp2|take\s*profit\s*2|objetivo\s*2|target\s*2)$/i.test(h)) colTP2 = idx;
+      // 34-36. TP3
+      else if (/(%\s*tp3|tp3\s*%|asignaci[oó]n\s*tp3|porcentaje\s*tp3)/i.test(h)) colTP3Pct = idx;
+      else if (/(profit.*capa.*3|ganancia.*capa.*3|profit.*3)/i.test(h)) colProfit3 = idx;
+      else if (/^(tp3|take\s*profit\s*3|objetivo\s*3|target\s*3)$/i.test(h)) colTP3 = idx;
+      // 37. Reglas de Ejecución Táctica
+      else if (/(reglas.*ejecuci[oó]n|reglas.*t[aá]cticas|gesti[oó]n.*t[aá]ctica|tactical\s*rules)/i.test(h)) colTactical = idx;
+      // 38. Disciplina del Trade
+      else if (/(disciplina.*trade|disciplina|reglas.*disciplina|trade\s*discipline)/i.test(h)) colDiscipline = idx;
+      // 39. Estado
+      else if (/^(estado|status|estado.*trade|estado.*estrategia)$/i.test(h)) colStatus = idx;
+      // 40. Fecha y Hora Registro
+      else if (/(fecha.*hora.*registro|fecha.*registro|timestamp|registro)/i.test(h)) colTimestamp = idx;
     });
+
+    const isEstrategiaMap = estrategiaSource instanceof Map;
+    const isEstrategiaSet = estrategiaSource instanceof Set;
 
     const dataRows = rows.slice(1);
     const strategies: Strategy[] = [];
@@ -671,14 +786,41 @@ export class SheetsService {
         return; // Omitir estrategia retirada / pasada / inactiva
       }
 
-      // FILTRAR ESTRICTAMENTE: Solo estrategias ACTIVAS según la Hoja: Estrategia, Columna M
-      if (activeStrategySet && activeStrategySet.size > 0) {
-        const normName = stratName.toLowerCase().trim();
-        const normAsset = rawAsset.toLowerCase().trim();
-        const isActive = activeStrategySet.has(normName) ||
-          Array.from(activeStrategySet).some(a => normName === a || normName.startsWith(a) || a.startsWith(normName) || a.startsWith(normAsset + '_'));
-        if (!isActive) {
-          return; // Omitir estrategia inactiva según Hoja Estrategia, Columna M
+      // Buscar metadatos enriquecidos de la hoja Estrategia
+      const normName = stratName.toLowerCase().trim();
+      const normAsset = rawAsset.toLowerCase().trim();
+      let detail: EstrategiaDetail | undefined = undefined;
+
+      if (isEstrategiaMap) {
+        const map = estrategiaSource as Map<string, EstrategiaDetail>;
+        detail = map.get(normName) || map.get(normAsset);
+        if (!detail) {
+          for (const [key, d] of map.entries()) {
+            if (normName.startsWith(key) || key.startsWith(normName) || key.startsWith(normAsset + '_')) {
+              detail = d;
+              break;
+            }
+          }
+        }
+      }
+
+      // Si la hoja Estrategia la marca como Inactiva/Retirada:
+      if (detail && detail.status) {
+        const st = detail.status.toLowerCase();
+        if (st.includes('inactiv') || st.includes('retirad') || st.includes('cerrad') || st.includes('pasad')) {
+          return;
+        }
+      }
+
+      // Compatibilidad con activeStrategySet
+      if (isEstrategiaSet) {
+        const set = estrategiaSource as Set<string>;
+        if (set.size > 0) {
+          const isActive = set.has(normName) ||
+            Array.from(set).some(a => normName === a || normName.startsWith(a) || a.startsWith(normName) || a.startsWith(normAsset + '_'));
+          if (!isActive) {
+            return;
+          }
         }
       }
 
@@ -721,10 +863,8 @@ export class SheetsService {
       const tacticalRules = (row[colTactical] || '').toString().trim();
       const tradeDiscipline = (row[colDiscipline] || '').toString().trim();
 
-      const rawStatus = (row[colStatus] || 'Pendiente').toString().trim().toLowerCase();
-      let status: 'Active' | 'Pending' | 'Completed' = 'Active';
-      if (rawStatus.includes('pend')) status = 'Pending';
-      else if (rawStatus.includes('cerr') || rawStatus.includes('comp')) status = 'Completed';
+      const orderStatus = (row[colStatus] || 'Pendiente').toString().trim() || 'Pendiente';
+      const estrategiaStatus = (detail?.status || 'Activa').trim();
 
       const dcaLevels: DcaLevel[] = [
         {
@@ -759,12 +899,14 @@ export class SheetsService {
         });
       }
 
+      const registrationTimestamp = (row[colTimestamp] || detail?.registrationTimestamp || '').toString().trim();
+
       strategies.push({
         id,
         symbol,
         coinName: rawAsset,
         strategyName: stratName.length > 0 ? stratName : `${symbol}_STRATEGY`,
-        date: (row[colDate] || '').toString().trim(),
+        date: (row[colDate] || detail?.date || '').toString().trim(),
         capitalAssigned,
         market,
         marginType,
@@ -773,7 +915,7 @@ export class SheetsService {
         type,
         category,
         scenarioNotes,
-        notes: scenarioNotes,
+        notes: scenarioNotes || detail?.commentsBacktesting,
         entryPrice: e1Price,
         e1AllocationPercent: e1Alloc,
         e1Units,
@@ -794,12 +936,23 @@ export class SheetsService {
         lossCapa3,
         tacticalRules,
         tradeDiscipline,
-        status: (row[colStatus] || 'Activa').toString().trim() || 'Activa',
-        statusSheetEstrategia: (row[colStatus] || 'Activa').toString().trim() || 'Activa',
-        rowIndex: index + 1 // Row 1 is header, data rows start at 2
+        status: orderStatus,
+        statusSheetEstrategia: estrategiaStatus,
+        rowIndex: index + 2, // Fila exacta en Google Sheets (Encabezados en fila 1)
+        
+        // Metadatos enriquecidos de la pestaña 'Estrategia'
+        displayName: detail?.displayName || stratName,
+        timeframe: detail?.timeframe || '1D',
+        orderType: detail?.orderType || 'Limit',
+        keyIndicators: detail?.keyIndicators,
+        entryRules: detail?.entryRules,
+        exitRules: detail?.exitRules,
+        riskManagement: detail?.riskManagement,
+        commentsBacktesting: detail?.commentsBacktesting,
+        registrationTimestamp
       });
 
-      // TPs
+      // Take Profits
       const tp1Price = this.parseNum(row[colTP1]);
       const tp1Pct = this.parseNum(row[colTP1Pct]) || 50;
       const tp1Profit = this.parseNum(row[colProfit1]);

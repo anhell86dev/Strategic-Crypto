@@ -60,12 +60,23 @@ export interface Strategy {
   lossCapa2?: number; // Col AA: Pérdida proyectada en USD si salta SL en Capa 2
   lossCapa3?: number; // Col AB: Pérdida máxima en USD (Riesgo total de la posición)
 
-  // Gobernanza y Reglas (Columnas AL a AN)
+  // Gobernanza y Reglas (Columnas AL a AN y Hoja Estrategia)
   tacticalRules?: string; // Col AL: Reglas de Ejecución Táctica (e.g. "Mover SL a Breakeven al tocar TP1...")
   tradeDiscipline?: string; // Col AM: Disciplina del Trade (e.g. "No promediar por debajo de E3...")
   status: 'Active' | 'Pending' | 'Completed' | 'Invalidado' | 'ACTIVA' | 'INVALIDADO TARDE' | string; // Col AN: Estado
   statusSheetEstrategia?: string; // Col M en Hoja Estrategia (e.g. "Activa")
   rowIndex?: number; // Fila exacta en Google Sheets (e.g. 2, 3, 4...)
+
+  // Metadatos Enriquecidos (Hoja Estrategia & Registro)
+  timeframe?: string; // Col F en Estrategia: Temporalidad (e.g. "1D", "4h")
+  orderType?: string; // Col G en Estrategia: Tipo de Orden (e.g. "Limit", "Market")
+  keyIndicators?: string; // Col H en Estrategia: Indicadores Clave (e.g. "SMA-5, Estocástico...")
+  entryRules?: string; // Col I en Estrategia: Reglas de Entrada
+  exitRules?: string; // Col J en Estrategia: Reglas de Salida / TP
+  riskManagement?: string; // Col K en Estrategia: Gestión de Riesgo & Stop Loss
+  commentsBacktesting?: string; // Col L en Estrategia: Comentarios / Backtesting
+  displayName?: string; // Col D en Estrategia: Nombre de Estrategia descriptivo
+  registrationTimestamp?: string; // Col AO en Ordenes / Col N en Estrategia: Fecha y Hora Registro
 
   customAlertThreshold?: number; // e.g. 1.0%
   initialAllocation?: number; // e.g. 50 (%)

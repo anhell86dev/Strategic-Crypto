@@ -688,8 +688,7 @@ app.get('/api/sheets/live-data', async (req: Request, res: Response) => {
   try {
     const ordUrls = [
       `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Ordenes')}&${cacheBuster}`,
-      `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Órdenes')}&${cacheBuster}`,
-      `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=0&${cacheBuster}`
+      `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Órdenes')}&${cacheBuster}`
     ];
     for (const u of ordUrls) {
       const resp = await fetch(u, {
@@ -697,7 +696,8 @@ app.get('/api/sheets/live-data', async (req: Request, res: Response) => {
       });
       if (resp.ok) {
         const txt = await resp.text();
-        if (txt && !txt.includes('<!DOCTYPE html>') && txt.length > 100) {
+        // Validar que realmente sea la pestaña de Ordenes y no la de Mercados/Taxonomía
+        if (txt && !txt.includes('<!DOCTYPE html>') && txt.length > 100 && (txt.includes('E1') || txt.includes('Capital Asignado') || txt.includes('Nombre Estrategia'))) {
           ordenesCsv = txt;
           source = 'server_gviz_csv';
           break;
