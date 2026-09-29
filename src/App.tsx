@@ -22,6 +22,7 @@ import { AddStrategyModal } from './components/AddStrategyModal';
 import { DcaSimulatorModal } from './components/DcaSimulatorModal';
 import { MultiStrategyComparisonModal } from './components/MultiStrategyComparisonModal';
 import { TradeFlowchartModal } from './components/TradeFlowchartModal';
+import { MassiveAnalysisModal } from './components/MassiveAnalysisModal';
 import { calculateRiskReward } from './utils/riskReward';
 import { INITIAL_STRATEGIES, INITIAL_ORDERS } from './data/initialStrategies';
 import { TradeLogService } from './services/tradeLogService';
@@ -65,6 +66,7 @@ export default function App() {
   const [selectedStrategyIds, setSelectedStrategyIds] = useState<Set<number>>(new Set());
   const [isComparisonOpen, setIsComparisonOpen] = useState<boolean>(false);
   const [isFlowchartOpen, setIsFlowchartOpen] = useState<boolean>(false);
+  const [isMassiveAnalysisOpen, setIsMassiveAnalysisOpen] = useState<boolean>(false);
 
   // Trade History Log State
   const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>(() => TradeLogService.getLogs());
@@ -524,6 +526,7 @@ export default function App() {
         onTabChange={setActiveMainTab}
         onOpenGateway={() => setShowGateway(true)}
         onOpenFlowchart={() => setIsFlowchartOpen(true)}
+        onOpenMassiveAnalysis={() => setIsMassiveAnalysisOpen(true)}
       />
 
       {/* Notificación Flotante de Depuración de Caché */}
@@ -584,6 +587,7 @@ export default function App() {
                 }
               }}
               isGreenFilterActive={activeFilters.some(f => f.type === 'TRAFFIC_LIGHT' && f.value === 'VERDE')}
+              onOpenMassiveAnalysis={() => setIsMassiveAnalysisOpen(true)}
             />
 
             {/* Dynamic Composable Filter Bar */}
@@ -616,6 +620,7 @@ export default function App() {
               onToggleSelectAll={handleToggleSelectAll}
               onOpenComparison={() => setIsComparisonOpen(true)}
               onStatusUpdated={handleStatusUpdated}
+              onOpenMassiveAnalysis={() => setIsMassiveAnalysisOpen(true)}
             />
 
             {/* Chronological Trade History Log (Filled Alerts Tracker) */}
@@ -664,6 +669,16 @@ export default function App() {
         isOpen={isFlowchartOpen}
         onClose={() => setIsFlowchartOpen(false)}
         strategy={sortedAndFilteredStrategies[0] || strategies[0] || null}
+      />
+
+      <MassiveAnalysisModal
+        isOpen={isMassiveAnalysisOpen}
+        onClose={() => setIsMassiveAnalysisOpen(false)}
+        strategies={strategies as StrategyWithOrders[]}
+        onAnalysisApplied={(updated) => {
+          setStrategies(updated);
+          SheetsService.saveCustomData(updated, orders);
+        }}
       />
 
       {/* Footer */}

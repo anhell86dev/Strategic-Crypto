@@ -123,6 +123,8 @@ export interface EstrategiaDetail {
   commentsBacktesting?: string;
   status?: string;
   registrationTimestamp?: string;
+  rowIndex?: number; // Fila exacta en pestaña 'Estrategia' (e.g. 2, 3...)
+  cellM?: string;    // Celda de Estado en pestaña 'Estrategia' (e.g. "M2", "M3"...)
 }
 
 export class SheetsService {
@@ -256,11 +258,29 @@ export class SheetsService {
       else if (/(fecha.*hora.*registro|fecha.*registro|timestamp|registro)/i.test(h)) colTimestamp = idx;
     });
 
+    // Check local status overrides for Estrategia sheet
+    let localOverrides: Record<string, { status: string; cell: string }> = {};
+    try {
+      const stored = localStorage.getItem('crypto_radar_estrategia_status_overrides');
+      if (stored) localOverrides = JSON.parse(stored);
+    } catch {
+      // ignore
+    }
+
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
       if (!r || r.length <= colCode) continue;
       const code = (r[colCode] || r[0] || '').trim();
       if (!code) continue;
+
+      const rowIndex = i + 1;
+      const cellM = `M${rowIndex}`;
+
+      const normCode = code.toLowerCase().trim();
+      let status = (r[colStatus] || 'Activa').trim();
+      if (localOverrides[normCode]?.status) {
+        status = localOverrides[normCode].status;
+      }
 
       const detail: EstrategiaDetail = {
         code,
@@ -275,11 +295,12 @@ export class SheetsService {
         exitRules: r[colExit] || '',
         riskManagement: r[colRisk] || '',
         commentsBacktesting: r[colComments] || '',
-        status: (r[colStatus] || 'Activa').trim(),
-        registrationTimestamp: r[colTimestamp] || ''
+        status,
+        registrationTimestamp: r[colTimestamp] || '',
+        rowIndex,
+        cellM
       };
 
-      const normCode = code.toLowerCase().trim();
       detailsMap.set(normCode, detail);
 
       const rawPair = (r[colPair] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -937,8 +958,10 @@ export class SheetsService {
         tacticalRules,
         tradeDiscipline,
         status: orderStatus,
-        statusSheetEstrategia: estrategiaStatus,
-        rowIndex: index + 2, // Fila exacta en Google Sheets (Encabezados en fila 1)
+        statusSheetEstrategia: detail?.status || estrategiaStatus,
+        rowIndex: index + 2, // Fila exacta en pestaña Ordenes (Encabezados en fila 1)
+        estrategiaRowIndex: detail?.rowIndex,
+        estrategiaCellM: detail?.cellM || (detail?.rowIndex ? `M${detail.rowIndex}` : undefined),
         
         // Metadatos enriquecidos de la pestaña 'Estrategia'
         displayName: detail?.displayName || stratName,
@@ -998,4 +1021,73 @@ export class SheetsService {
 
     return { strategies, orders };
   }
+
+  /**
+   * Guarda y persiste las actualizaciones de Estado para la pestaña 'Estrategia' (Columna M).
+   * 1. Actualiza localStorage ('crypto_radar_estrategia_status_overrides')
+   * 2. Envía solicitud POST al proxy backend /api/sheets/update-estrategia-status
+   * 3. Si hay URL de Google Apps Script, envía las celdas a la hoja real
+   */
+  public static async saveEstrategiaStatusOverrides(
+    updates: Array<{ code: string; cell: string; status: string; reason?: string }>,
+    proxyUrl?: string
+  ): Promise<{ success: boolean; message: string; count: number }> {
+    try {
+      // 1. Guardar en localStorage
+      let currentOverrides: Record<string, { status: string; cell: string; code: string; updatedAt: string }> = {};
+      try {
+        const stored = localStorage.getItem('crypto_radar_estrategia_status_overrides');
+        if (stored) currentOverrides = JSON.parse(stored);
+      } catch {
+        // ignore
+      }
+
+      const now = new Date().toISOString();
+      updates.forEach(u => {
+        if (u.code) {
+          currentOverrides[u.code.toLowerCase().trim()] = {
+            code: u.code,
+            cell: u.cell || 'M',
+            status: u.status,
+            updatedAt: now
+          };
+        }
+      });
+
+      localStorage.setItem('crypto_radar_estrategia_status_overrides', JSON.stringify(currentOverrides));
+
+      // 2. Enviar al backend /api/sheets/update-estrategia-status
+      const effectiveProxy = proxyUrl || this.getConfig().proxyUrl || '';
+      const response = await fetch('/api/sheets/update-estrategia-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates,
+          proxyUrl: effectiveProxy
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: true,
+          count: updates.length,
+          message: `Se han actualizado ${updates.length} estados en la columna M de la hoja "Estrategia".`
+        };
+      }
+
+      return {
+        success: true,
+        count: updates.length,
+        message: `Se han registrado ${updates.length} estados en caché local para la columna M.`
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        count: 0,
+        message: e.message || 'Error al persistir estados de la hoja Estrategia.'
+      };
+    }
+  }
 }
+

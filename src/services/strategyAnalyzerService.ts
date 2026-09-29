@@ -1,6 +1,7 @@
-import { StrategyWithOrders, TrafficLightInfo } from '../types';
+import { StrategyWithOrders, TrafficLightInfo, MassiveAnalysisItem, MassiveAnalysisSummary } from '../types';
 import { calculateRiskReward } from '../utils/riskReward';
 import { indicatorsService } from './indicatorsService';
+import { SheetsService } from './sheetsService';
 
 export type HistoricalAnalysisStatus = 
   | 'INVALIDADO' // Tocó SL
@@ -115,6 +116,22 @@ export class StrategyAnalyzerService {
   }
 
   /**
+   * Calculates time elapsed from an event date until now
+   */
+  public static getTimeAgoString(eventDate: Date, now: Date = new Date()): string {
+    const diffMs = now.getTime() - eventDate.getTime();
+    if (diffMs < 0) return 'recién';
+    const totalMinutes = Math.floor(diffMs / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    if (days > 0) return `hace ${days}d ${remHours}h`;
+    if (hours > 0) return `hace ${hours}h ${mins}m`;
+    return `hace ${mins}m`;
+  }
+
+  /**
    * Analyzes Binance Historical Candlesticks from publication time to now
    * Checks SL, E1, E2, E3, and TP1..TP3 hits with exact timestamps.
    */
@@ -158,10 +175,23 @@ export class StrategyAnalyzerService {
     try {
       // Limit to max 1000 candles
       const startTime = Math.max(pubTimestamp - 5 * 60 * 1000, nowTimestamp - 7 * 24 * 3600 * 1000);
-      const url = `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=5m&startTime=${startTime}&limit=1000`;
-      const res = await fetch(url);
-      if (res.ok) {
-        klines = await res.json();
+      const urls = [
+        `https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=15m&startTime=${startTime}&limit=1000`,
+        `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=15m&startTime=${startTime}&limit=1000`
+      ];
+      for (const u of urls) {
+        try {
+          const res = await fetch(u);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              klines = data;
+              break;
+            }
+          }
+        } catch {
+          // continue to next URL
+        }
       }
     } catch (e) {
       console.warn('Could not fetch historical klines from Binance API:', e);
@@ -678,4 +708,294 @@ export class StrategyAnalyzerService {
       };
     }
   }
+
+  /**
+   * Ejecuta el ANÁLISIS MASIVO de todas las estrategias:
+   * - Fechas principales:
+   *   1. Fecha del análisis: Momento exacto de ejecución (GMT-6).
+   *   2. Temporalidad PUB: Momento y temporalidad de publicación de cada estrategia (Col B, C, F de Estrategia).
+   * - Regla de descarte estricto:
+   *   * Si tocó SL o TP se descarta.
+   *   * En la hoja 'Estrategia', columna M (Estado), cambiar el valor por: "invalidada: razon".
+   */
+  public static async runMassiveAnalysis(
+    strategies: StrategyWithOrders[],
+    onProgress?: (completed: number, total: number, currentName: string) => void
+  ): Promise<MassiveAnalysisSummary> {
+    const analysisDate = new Date();
+    const analysisDateFormatted = this.formatGuatemalaDate(analysisDate);
+    const results: MassiveAnalysisItem[] = [];
+
+    let completed = 0;
+    const total = strategies.length;
+
+    // Process in batches of 4 concurrent calls to Binance public endpoints
+    const batchSize = 4;
+    for (let i = 0; i < strategies.length; i += batchSize) {
+      const batch = strategies.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map(async (strat) => {
+          const res = await this.evaluateStrategyMassive(strat, analysisDate, analysisDateFormatted);
+          completed++;
+          if (onProgress) {
+            onProgress(completed, total, strat.symbol);
+          }
+          return res;
+        })
+      );
+      results.push(...batchResults);
+    }
+
+    const discardedBySlCount = results.filter(r => r.discardReason === 'SL_HIT').length;
+    const discardedByTpCount = results.filter(r => r.discardReason === 'TP_HIT').length;
+    const discardedCount = discardedBySlCount + discardedByTpCount;
+    const activeCount = results.filter(r => !r.isDiscarded && r.statusLabelM.toUpperCase().includes('ACTIVA')).length;
+    const pendingCount = results.length - discardedCount - activeCount;
+
+    return {
+      analysisTimestamp: analysisDate,
+      analysisDateFormatted,
+      totalStrategies: total,
+      discardedCount,
+      discardedBySlCount,
+      discardedByTpCount,
+      activeCount,
+      pendingCount,
+      results
+    };
+  }
+
+  /**
+   * Helper que evalúa individualmente cada estrategia contra sus velas históricas desde su publicación
+   */
+  private static async evaluateStrategyMassive(
+    strat: StrategyWithOrders,
+    analysisDate: Date,
+    analysisDateFormatted: string
+  ): Promise<MassiveAnalysisItem> {
+    const {
+      id,
+      symbol,
+      coinName,
+      type,
+      entryPrice,
+      stopLoss,
+      orders = [],
+      currentPrice,
+      date,
+      strategyName,
+      timeframe = '1D',
+      estrategiaRowIndex,
+      estrategiaCellM,
+      rowIndex,
+      high24h,
+      low24h
+    } = strat;
+
+    const isLong = type === 'LONG';
+    const pubDate = this.parsePublicationDate(date, strategyName) || new Date(analysisDate.getTime() - 48 * 3600 * 1000);
+    const pubDateFormatted = this.formatGuatemalaDate(pubDate);
+    const pubTimestamp = pubDate.getTime();
+    const nowTimestamp = analysisDate.getTime();
+
+    // Celda de destino en Hoja Estrategia, Columna M
+    const targetRow = estrategiaRowIndex || rowIndex || (id + 1);
+    const sheetCellM = estrategiaCellM || `M${targetRow}`;
+
+    const e1 = entryPrice;
+    const sl = stopLoss;
+    const tp1 = orders[0]?.targetPrice || (isLong ? e1 * 1.03 : e1 * 0.97);
+    const tp2 = orders[1]?.targetPrice;
+    const tp3 = orders[2]?.targetPrice;
+
+    // Fetch velas de Binance desde publicación hasta ahora
+    let klines: any[] = [];
+    const sym = symbol.toUpperCase().trim();
+    try {
+      const ageHours = (nowTimestamp - pubTimestamp) / (3600 * 1000);
+      const interval = ageHours > 120 ? '1h' : (ageHours > 48 ? '15m' : '5m');
+      const startTime = Math.max(pubTimestamp - 5 * 60 * 1000, nowTimestamp - 14 * 24 * 3600 * 1000);
+
+      const urls = [
+        `https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=${interval}&startTime=${startTime}&limit=1000`,
+        `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${interval}&startTime=${startTime}&limit=1000`
+      ];
+
+      for (const u of urls) {
+        try {
+          const res = await fetch(u);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              klines = data;
+              break;
+            }
+          }
+        } catch {
+          // try next URL
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    let slHit = false;
+    let tpHit = false;
+    let whichTp = 'TP1';
+    let eventTime: Date | undefined;
+    let eventPrice: number | undefined;
+    let eventDiffStr: string | undefined;
+    let e1Hit = false;
+
+    if (Array.isArray(klines) && klines.length > 0) {
+      for (const candle of klines) {
+        const openTime = typeof candle[0] === 'number' ? candle[0] : parseInt(candle[0]);
+        if (openTime < pubTimestamp - 60000) continue;
+
+        const high = parseFloat(candle[2]);
+        const low = parseFloat(candle[3]);
+
+        // E1 check
+        if (!e1Hit) {
+          if (isLong ? low <= e1 : high >= e1) {
+            e1Hit = true;
+          }
+        }
+
+        // 1. Check Stop Loss
+        const touchedSl = isLong ? low <= sl : high >= sl;
+        if (touchedSl && !slHit) {
+          slHit = true;
+          eventTime = new Date(openTime);
+          eventPrice = sl;
+          eventDiffStr = this.getTimeDeltaString(pubDate, eventTime);
+          break; // Stop loss takes absolute priority
+        }
+
+        // 2. Check Take Profit 1, 2, 3
+        if (!tpHit) {
+          if (tp3 && (isLong ? high >= tp3 : low <= tp3)) {
+            tpHit = true;
+            whichTp = 'TP3';
+            eventTime = new Date(openTime);
+            eventPrice = tp3;
+            eventDiffStr = this.getTimeDeltaString(pubDate, eventTime);
+          } else if (tp2 && (isLong ? high >= tp2 : low <= tp2)) {
+            tpHit = true;
+            whichTp = 'TP2';
+            eventTime = new Date(openTime);
+            eventPrice = tp2;
+            eventDiffStr = this.getTimeDeltaString(pubDate, eventTime);
+          } else if (isLong ? high >= tp1 : low <= tp1) {
+            tpHit = true;
+            whichTp = 'TP1';
+            eventTime = new Date(openTime);
+            eventPrice = tp1;
+            eventDiffStr = this.getTimeDeltaString(pubDate, eventTime);
+          }
+        }
+      }
+    } else {
+      // Fallback a extremos 24h / precio live
+      const live = currentPrice || entryPrice;
+      const dLow = low24h !== undefined ? low24h : live;
+      const dHigh = high24h !== undefined ? high24h : live;
+
+      if (isLong ? dLow <= sl : dHigh >= sl) {
+        slHit = true;
+        eventTime = analysisDate;
+        eventPrice = sl;
+        eventDiffStr = '+0m';
+      } else if (isLong ? dHigh >= tp1 : dLow <= tp1) {
+        tpHit = true;
+        whichTp = 'TP1';
+        eventTime = analysisDate;
+        eventPrice = tp1;
+        eventDiffStr = '+0m';
+      }
+    }
+
+    // Regla de Descarte y Generación de "invalidada: razon"
+    let isDiscarded = false;
+    let discardReason: 'SL_HIT' | 'TP_HIT' | 'NONE' = 'NONE';
+    let reasonText = 'Vigente';
+    let statusLabelM = 'Activa';
+
+    const eventTimeStr = eventTime ? this.formatGuatemalaDate(eventTime) : undefined;
+    const timeAgoStr = eventTime ? this.getTimeAgoString(eventTime, analysisDate) : undefined;
+
+    if (slHit) {
+      isDiscarded = true;
+      discardReason = 'SL_HIT';
+      reasonText = `Toco SL ($${sl.toFixed(4)})`;
+      statusLabelM = eventTimeStr 
+        ? `invalidada: Toco SL a las ${eventTimeStr.split(',')[1]?.trim() || eventTimeStr}` 
+        : 'invalidada: Toco SL';
+    } else if (tpHit) {
+      isDiscarded = true;
+      discardReason = 'TP_HIT';
+      reasonText = `Toco ${whichTp}`;
+      statusLabelM = eventTimeStr 
+        ? `invalidada: Toco ${whichTp} a las ${eventTimeStr.split(',')[1]?.trim() || eventTimeStr}` 
+        : `invalidada: Toco ${whichTp}`;
+    } else {
+      isDiscarded = false;
+      discardReason = 'NONE';
+      reasonText = e1Hit ? 'Activa (En Zona)' : 'Pendiente';
+      statusLabelM = strat.statusSheetEstrategia && !strat.statusSheetEstrategia.toLowerCase().includes('invalidad')
+        ? strat.statusSheetEstrategia
+        : (e1Hit ? 'Activa' : 'Pendiente');
+    }
+
+    return {
+      strategyId: id,
+      code: strat.strategyName || `${symbol}_STRAT`,
+      symbol,
+      coinName: coinName || symbol,
+      type,
+      entryPrice: e1,
+      stopLoss: sl,
+      tp1Price: tp1,
+      tp2Price: tp2,
+      tp3Price: tp3,
+      currentPrice: currentPrice || e1,
+      pubDate,
+      pubDateFormatted,
+      pubTimeframe: timeframe,
+      analysisDate,
+      analysisDateFormatted,
+      isDiscarded,
+      discardReason,
+      reasonText,
+      statusLabelM,
+      sheetName: 'Estrategia',
+      sheetCellM,
+      sheetRowIndex: targetRow,
+      eventTimeStr,
+      diffFromPubStr: eventDiffStr,
+      timeAgoStr,
+      eventPrice,
+      candlesAnalyzed: klines.length,
+      e1Hit
+    };
+  }
+
+  /**
+   * Aplica los resultados del análisis masivo a la Hoja 'Estrategia' (Columna M).
+   * Actualiza el backend, localStorage y las estrategias activas.
+   */
+  public static async applyMassiveAnalysisToSheets(
+    items: MassiveAnalysisItem[],
+    proxyUrl?: string
+  ): Promise<{ success: boolean; message: string; count: number }> {
+    const updates = items.map(item => ({
+      code: item.code,
+      cell: item.sheetCellM,
+      status: item.statusLabelM,
+      reason: item.reasonText
+    }));
+
+    return await SheetsService.saveEstrategiaStatusOverrides(updates, proxyUrl);
+  }
 }
+

@@ -12,7 +12,8 @@ import {
   X, 
   Sparkles,
   Scale,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Zap
 } from 'lucide-react';
 
 interface StrategyTableProps {
@@ -28,6 +29,7 @@ interface StrategyTableProps {
   onToggleSelectAll?: () => void;
   onOpenComparison?: () => void;
   onStatusUpdated?: (strategyId: number, newStatus: string) => void;
+  onOpenMassiveAnalysis?: () => void;
 }
 
 export const StrategyTable: React.FC<StrategyTableProps> = ({
@@ -42,7 +44,8 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
   onToggleSelect,
   onToggleSelectAll,
   onOpenComparison,
-  onStatusUpdated
+  onStatusUpdated,
+  onOpenMassiveAnalysis
 }) => {
   const isAllSelected = strategies.length > 0 && strategies.every(s => selectedIds.has(s.id));
   const selectedCount = selectedIds.size;
@@ -119,7 +122,19 @@ export const StrategyTable: React.FC<StrategyTableProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {onOpenMassiveAnalysis && (
+              <button
+                type="button"
+                onClick={onOpenMassiveAnalysis}
+                title="Ejecutar análisis masivo de estrategias sobre la hoja Estrategia (Columna M)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-mono font-black bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white shadow-md shadow-indigo-600/25 ring-1 ring-violet-400/40 transition-all cursor-pointer active:scale-95"
+              >
+                <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                <span>Análisis Masivo (Col M)</span>
+              </button>
+            )}
+
             {selectedCount > 0 && onOpenComparison && (
               <button
                 type="button"

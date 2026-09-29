@@ -9,7 +9,8 @@ import {
   Activity,
   CheckCircle2, 
   AlertCircle,
-  GitBranch
+  GitBranch,
+  Zap
 } from 'lucide-react';
 import { DensityToggle } from './DensityToggle';
 import { ConnectionStatus } from '../types';
@@ -31,6 +32,7 @@ interface HeaderProps {
   onTabChange?: (tab: 'radar' | 'binance') => void;
   onOpenGateway?: () => void;
   onOpenFlowchart?: () => void;
+  onOpenMassiveAnalysis?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -47,7 +49,8 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab = 'radar',
   onTabChange,
   onOpenGateway,
-  onOpenFlowchart
+  onOpenFlowchart,
+  onOpenMassiveAnalysis
 }) => {
 
   const formatTime = (d: Date | null) => {
@@ -206,6 +209,18 @@ export const Header: React.FC<HeaderProps> = ({
               {formatTime(lastSyncTime)}
             </div>
           </div>
+
+          {/* Botón de Análisis Masivo */}
+          {onOpenMassiveAnalysis && (
+            <button
+              onClick={onOpenMassiveAnalysis}
+              title="Ejecutar análisis masivo de estrategias sobre la hoja Estrategia (Columna M)"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-black bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white rounded-xl shadow-lg shadow-indigo-600/30 ring-1 ring-violet-400/40 transition-all cursor-pointer font-mono active:scale-95"
+            >
+              <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+              <span>Análisis Masivo (Col M)</span>
+            </button>
+          )}
 
           {/* Flujograma Táctico Button */}
           {onOpenFlowchart && (

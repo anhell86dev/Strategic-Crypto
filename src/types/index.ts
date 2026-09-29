@@ -63,9 +63,11 @@ export interface Strategy {
   // Gobernanza y Reglas (Columnas AL a AN y Hoja Estrategia)
   tacticalRules?: string; // Col AL: Reglas de Ejecución Táctica (e.g. "Mover SL a Breakeven al tocar TP1...")
   tradeDiscipline?: string; // Col AM: Disciplina del Trade (e.g. "No promediar por debajo de E3...")
-  status: 'Active' | 'Pending' | 'Completed' | 'Invalidado' | 'ACTIVA' | 'INVALIDADO TARDE' | string; // Col AN: Estado
-  statusSheetEstrategia?: string; // Col M en Hoja Estrategia (e.g. "Activa")
-  rowIndex?: number; // Fila exacta en Google Sheets (e.g. 2, 3, 4...)
+  status: 'Active' | 'Pending' | 'Completed' | 'Invalidado' | 'ACTIVA' | 'INVALIDADO TARDE' | string; // Col AN: Estado en Ordenes
+  statusSheetEstrategia?: string; // Col M en Hoja Estrategia (e.g. "Activa", "invalidada: razon")
+  rowIndex?: number; // Fila exacta en Ordenes (e.g. 2, 3, 4...)
+  estrategiaRowIndex?: number; // Fila exacta en Hoja Estrategia (e.g. 2, 3, 4...)
+  estrategiaCellM?: string; // Celda exacta en Hoja Estrategia (e.g. "M2", "M3"...)
 
   // Metadatos Enriquecidos (Hoja Estrategia & Registro)
   timeframe?: string; // Col F en Estrategia: Temporalidad (e.g. "1D", "4h")
@@ -172,4 +174,56 @@ export interface TradeLogEntry {
   status: 'ENTRY_FILLED' | 'ZONE_TRIGGERED' | 'TP_HIT' | 'SL_HIT';
   notes?: string;
   takeProfitsCount?: number;
+}
+
+export interface MassiveAnalysisItem {
+  strategyId: number;
+  code: string;
+  symbol: string;
+  coinName: string;
+  type: 'LONG' | 'SHORT';
+  entryPrice: number;
+  stopLoss: number;
+  tp1Price: number;
+  tp2Price?: number;
+  tp3Price?: number;
+  currentPrice: number;
+  
+  // Fechas Clave
+  pubDate: Date;
+  pubDateFormatted: string;
+  pubTimeframe: string; // Temporalidad PUB (e.g. "4H / 1D", "1D")
+  analysisDate: Date;
+  analysisDateFormatted: string;
+  
+  // Resultado de Análisis
+  isDiscarded: boolean;
+  discardReason: 'SL_HIT' | 'TP_HIT' | 'NONE';
+  reasonText: string; // e.g. "Toco SL a las 14:30 (+4h 12m)" o "Toco TP1 a las 11:20"
+  statusLabelM: string; // e.g. "invalidada: Toco SL a las 14:30" o "Activa"
+  
+  // Coordenadas Hoja de Cálculo
+  sheetName: string; // 'Estrategia'
+  sheetCellM: string; // e.g. 'M2', 'M3'
+  sheetRowIndex: number;
+  
+  // Detalles del evento
+  eventTimeStr?: string;
+  diffFromPubStr?: string;
+  timeAgoStr?: string;
+  eventPrice?: number;
+  candlesAnalyzed: number;
+  e1Hit?: boolean;
+}
+
+export interface MassiveAnalysisSummary {
+  analysisTimestamp: Date;
+  analysisDateFormatted: string;
+  totalStrategies: number;
+  discardedCount: number;
+  discardedBySlCount: number;
+  discardedByTpCount: number;
+  activeCount: number;
+  pendingCount: number;
+  results: MassiveAnalysisItem[];
 }

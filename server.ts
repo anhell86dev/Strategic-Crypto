@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -732,6 +733,7 @@ app.get('/api/sheets/live-data', async (req: Request, res: Response) => {
       ordenesCsv,
       estrategiaCsv,
       values,
+      estrategiaStatusOverrides,
       timestamp: new Date().toISOString()
     });
   }
@@ -739,6 +741,82 @@ app.get('/api/sheets/live-data', async (req: Request, res: Response) => {
   return res.status(502).json({
     ok: false,
     error: 'No se pudo obtener datos en vivo de Google Sheets desde el servidor'
+  });
+});
+
+// Persisted status overrides for Hoja Estrategia (Columna M)
+const ESTRATEGIA_STATUS_FILE = path.resolve(process.cwd(), 'estrategia-status-overrides.json');
+let estrategiaStatusOverrides: Record<string, { cell: string; status: string; code: string; updatedAt: string }> = {};
+
+try {
+  if (fs.existsSync(ESTRATEGIA_STATUS_FILE)) {
+    estrategiaStatusOverrides = JSON.parse(fs.readFileSync(ESTRATEGIA_STATUS_FILE, 'utf-8'));
+  }
+} catch (e) {
+  // ignore
+}
+
+// 11. POST /api/sheets/update-estrategia-status - Batch updates for Estrategia sheet Col M
+app.post('/api/sheets/update-estrategia-status', async (req: Request, res: Response) => {
+  try {
+    const { updates, proxyUrl } = req.body;
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ ok: false, error: 'Lista de actualizaciones inválida o vacía' });
+    }
+
+    const now = new Date().toISOString();
+    updates.forEach((item: { code: string; cell: string; status: string }) => {
+      if (item.code) {
+        estrategiaStatusOverrides[item.code.toLowerCase().trim()] = {
+          code: item.code,
+          cell: item.cell || 'M',
+          status: item.status,
+          updatedAt: now
+        };
+      }
+    });
+
+    try {
+      fs.writeFileSync(ESTRATEGIA_STATUS_FILE, JSON.stringify(estrategiaStatusOverrides, null, 2), 'utf-8');
+    } catch (err: any) {
+      console.warn('[Server] Could not save status overrides file:', err.message);
+    }
+
+    // Forward to Google Apps Script proxy if configured
+    let proxySent = false;
+    if (proxyUrl && typeof proxyUrl === 'string' && proxyUrl.startsWith('http')) {
+      try {
+        await fetch(proxyUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'batchUpdateCells',
+            sheetName: 'Estrategia',
+            updates: updates.map((u: any) => ({ cell: u.cell, value: u.status }))
+          })
+        });
+        proxySent = true;
+      } catch (e: any) {
+        console.warn('[Server] Forwarding to Apps Script proxy warning:', e.message);
+      }
+    }
+
+    return res.json({
+      ok: true,
+      count: updates.length,
+      proxySent,
+      overrides: estrategiaStatusOverrides
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 12. GET /api/sheets/estrategia-status-overrides - Get current overrides for Estrategia sheet
+app.get('/api/sheets/estrategia-status-overrides', (_req: Request, res: Response) => {
+  return res.json({
+    ok: true,
+    overrides: estrategiaStatusOverrides
   });
 });
 

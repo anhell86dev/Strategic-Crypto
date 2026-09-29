@@ -2,10 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { StrategyWithOrders } from '../types';
 import { indicatorsService } from '../services/indicatorsService';
 import { multiTimeframeService } from '../services/multiTimeframeService';
+import { StrategyAnalyzerService } from '../services/strategyAnalyzerService';
 import { MiniSparkline } from './MiniSparkline';
 import { StrategyConfluencePanel } from './StrategyConfluencePanel';
 import { HorizontalPriceScaleBar } from './HorizontalPriceScaleBar';
 import { TradeFlowchartModal } from './TradeFlowchartModal';
+
+/**
+ * Calcula de forma precisa el tiempo transcurrido desde una fecha y hora hasta la actualidad
+ */
+const formatTimeAgo = (fromDate: Date, toDate: Date = new Date()): string => {
+  const diffMs = toDate.getTime() - fromDate.getTime();
+  if (diffMs < 0) return 'recién';
+  const totalMins = Math.floor(diffMs / 60000);
+  if (totalMins < 1) return 'hace segs';
+  if (totalMins < 60) return `hace ${totalMins}m`;
+  const hours = Math.floor(totalMins / 60);
+  const remainingMins = totalMins % 60;
+  if (hours < 24) {
+    return remainingMins > 0 ? `hace ${hours}h ${remainingMins}m` : `hace ${hours}h`;
+  }
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours > 0 ? `hace ${days}d ${remainingHours}h` : `hace ${days}d`;
+};
 import { 
   Trophy, 
   Flame, 
@@ -23,7 +43,8 @@ import {
   ChevronUp,
   Activity,
   Clock,
-  GitBranch
+  GitBranch,
+  Zap
 } from 'lucide-react';
 
 interface TopGreenOpportunitiesProps {
@@ -31,13 +52,15 @@ interface TopGreenOpportunitiesProps {
   onSelectStrategy?: (strategy: StrategyWithOrders) => void;
   onFilterGreen?: () => void;
   isGreenFilterActive?: boolean;
+  onOpenMassiveAnalysis?: () => void;
 }
 
 export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
   topStrategies,
   onSelectStrategy,
   onFilterGreen,
-  isGreenFilterActive = false
+  isGreenFilterActive = false,
+  onOpenMassiveAnalysis
 }) => {
   // Local state for interactive per-entry investment ($), checked entry levels, editable entry prices per strategy
   const [entryInvestments, setEntryInvestments] = useState<Record<string, { e1?: number; e2?: number; e3?: number }>>({});
@@ -297,6 +320,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
         {/* Global Toolbar Buttons */}
         <div className="flex items-center gap-2.5 flex-wrap self-start md:self-auto">
+          {/* Button: Análisis Masivo */}
+          {onOpenMassiveAnalysis && (
+            <button
+              type="button"
+              onClick={onOpenMassiveAnalysis}
+              title="Ejecutar Análisis Masivo: Descarta trades con SL o TP tocado y actualiza la Columna M (Estado) de la Hoja Estrategia"
+              className="px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/30 font-mono bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white ring-1 ring-violet-400/50 active:scale-95"
+            >
+              <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+              <span>Análisis Masivo (Col M)</span>
+            </button>
+          )}
+
           {/* Button: Flujograma Táctico */}
           <button
             type="button"
@@ -623,18 +659,29 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const pubMinPrice = Math.min(strat.entryPrice, currentPrice, dLow);
               const pubMaxPrice = Math.max(strat.entryPrice, currentPrice, dHigh);
 
-              const getStratTouchedTime = (offsetMinutes: number = 0) => {
-                const nameMatch = (strat.strategyName || '').match(/_(\d{2})[-/.](\d{2})[-/.](\d{2,4})_(\d{2}:\d{2})/);
-                if (nameMatch) {
-                  const [, d, m, y, t] = nameMatch;
-                  if (offsetMinutes === 0) return t;
-                  const [hh, mm] = t.split(':').map(Number);
-                  const totalMins = (hh * 60 + mm + offsetMinutes) % 1440;
-                  const hStr = String(Math.floor(totalMins / 60)).padStart(2, '0');
-                  const mStr = String(totalMins % 60).padStart(2, '0');
-                  return `${hStr}:${mStr}`;
-                }
-                return strat.date || '00:00';
+              // Parsear fecha y hora base exacta de la estrategia (evitar confusiones de horario entre días)
+              const pubDate = StrategyAnalyzerService.parsePublicationDate(strat.date, strat.strategyName) || new Date(Date.now() - 24 * 3600 * 1000);
+
+              const getStratTouchedEvent = (offsetMinutes: number = 0) => {
+                const eventTimestamp = pubDate.getTime() + offsetMinutes * 60 * 1000;
+                const eventDate = new Date(eventTimestamp);
+                const day = String(eventDate.getDate()).padStart(2, '0');
+                const month = String(eventDate.getMonth() + 1).padStart(2, '0');
+                const year = eventDate.getFullYear();
+                const hours = String(eventDate.getHours()).padStart(2, '0');
+                const mins = String(eventDate.getMinutes()).padStart(2, '0');
+                const dateStr = `${day}/${month} ${hours}:${mins}`;
+                const timeOnly = `${hours}:${mins}`;
+                const timeAgo = formatTimeAgo(eventDate);
+                const fullDateStr = `${day}/${month}/${year} ${hours}:${mins} (GMT-6)`;
+
+                return {
+                  timestamp: eventTimestamp,
+                  dateStr,
+                  timeOnly,
+                  timeAgo,
+                  fullDateStr
+                };
               };
 
               const isE1Touched = true; // E1 activa en publicación
@@ -645,41 +692,42 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const isTp2Touched = pTp2 ? (isLong ? pubMaxPrice >= pTp2 : pubMinPrice <= pTp2) : false;
               const isTp3Touched = pTp3 ? (isLong ? pubMaxPrice >= pTp3 : pubMinPrice <= pTp3) : false;
 
-              const timeE1 = getStratTouchedTime(0);
-              const timeE2 = isE2Touched ? getStratTouchedTime(18) : null;
-              const timeE3 = isE3Touched ? getStratTouchedTime(35) : null;
-              const timeSl = isSlTouched ? getStratTouchedTime(45) : null;
-              const timeTp1 = isTp1Touched ? getStratTouchedTime(22) : null;
-              const timeTp2 = isTp2Touched ? getStratTouchedTime(48) : null;
-              const timeTp3 = isTp3Touched ? getStratTouchedTime(75) : null;
+              const evE1 = getStratTouchedEvent(0);
+              const evE2 = isE2Touched ? getStratTouchedEvent(18) : null;
+              const evE3 = isE3Touched ? getStratTouchedEvent(35) : null;
+              const evSl = isSlTouched ? getStratTouchedEvent(45) : null;
+              const evTp1 = isTp1Touched ? getStratTouchedEvent(22) : null;
+              const evTp2 = isTp2Touched ? getStratTouchedEvent(48) : null;
+              const evTp3 = isTp3Touched ? getStratTouchedEvent(75) : null;
 
-              // Calcular orden cronológico de pasos numéricos (#1, #2, #3...) según la hora de toque
-              const parseMinutesFromTimeStr = (tStr: string | null): number => {
-                if (!tStr) return 9999;
-                const match = tStr.match(/(\d{1,2}):(\d{2})/);
-                if (match) {
-                  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
-                }
-                return 9999;
-              };
+              const touchedEvents: Array<{ key: 'e1' | 'e2' | 'e3' | 'sl' | 'tp1' | 'tp2' | 'tp3'; event: NonNullable<typeof evE1> }> = [];
+              if (evE1) touchedEvents.push({ key: 'e1', event: evE1 });
+              if (evE2) touchedEvents.push({ key: 'e2', event: evE2 });
+              if (evE3) touchedEvents.push({ key: 'e3', event: evE3 });
+              if (evTp1) touchedEvents.push({ key: 'tp1', event: evTp1 });
+              if (evTp2) touchedEvents.push({ key: 'tp2', event: evTp2 });
+              if (evTp3) touchedEvents.push({ key: 'tp3', event: evTp3 });
+              if (evSl) touchedEvents.push({ key: 'sl', event: evSl });
 
-              const touchedEvents: Array<{ key: 'e1' | 'e2' | 'e3' | 'sl' | 'tp1' | 'tp2' | 'tp3'; mins: number; timeStr: string }> = [];
-              if (timeE1) touchedEvents.push({ key: 'e1', mins: parseMinutesFromTimeStr(timeE1), timeStr: timeE1 });
-              if (isE2Touched && timeE2) touchedEvents.push({ key: 'e2', mins: parseMinutesFromTimeStr(timeE2), timeStr: timeE2 });
-              if (isE3Touched && timeE3) touchedEvents.push({ key: 'e3', mins: parseMinutesFromTimeStr(timeE3), timeStr: timeE3 });
-              if (isTp1Touched && timeTp1) touchedEvents.push({ key: 'tp1', mins: parseMinutesFromTimeStr(timeTp1), timeStr: timeTp1 });
-              if (isTp2Touched && timeTp2) touchedEvents.push({ key: 'tp2', mins: parseMinutesFromTimeStr(timeTp2), timeStr: timeTp2 });
-              if (isTp3Touched && timeTp3) touchedEvents.push({ key: 'tp3', mins: parseMinutesFromTimeStr(timeTp3), timeStr: timeTp3 });
-              if (isSlTouched && timeSl) touchedEvents.push({ key: 'sl', mins: parseMinutesFromTimeStr(timeSl), timeStr: timeSl });
+              // Ordenar cronológicamente por timestamp absoluto exacto (evita confusión entre fechas distintas)
+              touchedEvents.sort((a, b) => a.event.timestamp - b.event.timestamp);
 
-              // Ordenar cronológicamente por hora de ejecución
-              touchedEvents.sort((a, b) => a.mins - b.mins);
+              const stepMap: Record<string, { 
+                step: number; 
+                time: string; 
+                dateStr: string; 
+                timeAgo: string; 
+                fullTitle: string; 
+              }> = {};
 
-              const stepMap: Record<string, { step: number; time: string }> = {};
               touchedEvents.forEach((ev, idx) => {
+                const stepNum = idx + 1;
                 stepMap[ev.key] = {
-                  step: idx + 1,
-                  time: ev.timeStr
+                  step: stepNum,
+                  time: ev.event.timeOnly,
+                  dateStr: ev.event.dateStr,
+                  timeAgo: ev.event.timeAgo,
+                  fullTitle: `Paso #${stepNum} ejecutado: ${ev.event.fullDateStr} · Tiempo transcurrido: ${ev.event.timeAgo}`
                 };
               });
 
@@ -962,14 +1010,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                         ? 'bg-cyan-500/25 ring-2 ring-cyan-400 ring-inset shadow-[0_0_20px_rgba(6,182,212,0.4)]'
                         : checked.e3 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
                     }`}>
-                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {/* Badge de Paso Tocado en Esquina Superior con Número, Fecha/Hora y Tiempo Transcurrido */}
                       {stepMap.e3 && (
                         <div 
-                          className="absolute top-0.5 right-0.5 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-cyan-400 text-cyan-200 font-mono shadow-lg shadow-black/80 ring-1 ring-cyan-400/50"
-                          title={`Paso #${stepMap.e3.step} ejecutado a las ${stepMap.e3.time}`}
+                          className="absolute -top-1 right-0.5 z-20 flex flex-col items-end px-1.5 py-0.5 rounded bg-slate-950/95 border border-cyan-400 text-cyan-200 font-mono shadow-md shadow-black/90 ring-1 ring-cyan-400/40"
+                          title={stepMap.e3.fullTitle}
                         >
-                          <span className="text-xs sm:text-sm font-black text-cyan-300 leading-none">#{stepMap.e3.step}</span>
-                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.e3.time}</span>
+                          <div className="flex items-center gap-1 leading-none">
+                            <span className="text-xs sm:text-sm font-black text-cyan-300">#{stepMap.e3.step}</span>
+                            <span className="text-[9px] font-bold text-slate-200">{stepMap.e3.dateStr}</span>
+                          </div>
+                          <span className="text-[8px] font-semibold text-cyan-400/90 tracking-tight leading-none mt-0.5">
+                            {stepMap.e3.timeAgo}
+                          </span>
                         </div>
                       )}
                       {hasE3 ? (
@@ -1040,14 +1093,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                         ? 'bg-cyan-500/25 ring-2 ring-cyan-400 ring-inset shadow-[0_0_20px_rgba(6,182,212,0.4)]'
                         : checked.e2 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
                     }`}>
-                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {/* Badge de Paso Tocado en Esquina Superior con Número, Fecha/Hora y Tiempo Transcurrido */}
                       {stepMap.e2 && (
                         <div 
-                          className="absolute top-0.5 right-0.5 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-cyan-400 text-cyan-200 font-mono shadow-lg shadow-black/80 ring-1 ring-cyan-400/50"
-                          title={`Paso #${stepMap.e2.step} ejecutado a las ${stepMap.e2.time}`}
+                          className="absolute -top-1 right-0.5 z-20 flex flex-col items-end px-1.5 py-0.5 rounded bg-slate-950/95 border border-cyan-400 text-cyan-200 font-mono shadow-md shadow-black/90 ring-1 ring-cyan-400/40"
+                          title={stepMap.e2.fullTitle}
                         >
-                          <span className="text-xs sm:text-sm font-black text-cyan-300 leading-none">#{stepMap.e2.step}</span>
-                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.e2.time}</span>
+                          <div className="flex items-center gap-1 leading-none">
+                            <span className="text-xs sm:text-sm font-black text-cyan-300">#{stepMap.e2.step}</span>
+                            <span className="text-[9px] font-bold text-slate-200">{stepMap.e2.dateStr}</span>
+                          </div>
+                          <span className="text-[8px] font-semibold text-cyan-400/90 tracking-tight leading-none mt-0.5">
+                            {stepMap.e2.timeAgo}
+                          </span>
                         </div>
                       )}
                       {hasE2 ? (
@@ -1118,14 +1176,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                         ? 'bg-cyan-500/25 ring-2 ring-cyan-400 ring-inset shadow-[0_0_20px_rgba(6,182,212,0.4)]'
                         : checked.e1 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
                     }`}>
-                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {/* Badge de Paso Tocado en Esquina Superior con Número, Fecha/Hora y Tiempo Transcurrido */}
                       {stepMap.e1 && (
                         <div 
-                          className="absolute top-0.5 right-0.5 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-cyan-400 text-cyan-200 font-mono shadow-lg shadow-black/80 ring-1 ring-cyan-400/50"
-                          title={`Paso #${stepMap.e1.step} ejecutado a las ${stepMap.e1.time}`}
+                          className="absolute -top-1 right-0.5 z-20 flex flex-col items-end px-1.5 py-0.5 rounded bg-slate-950/95 border border-cyan-400 text-cyan-200 font-mono shadow-md shadow-black/90 ring-1 ring-cyan-400/40"
+                          title={stepMap.e1.fullTitle}
                         >
-                          <span className="text-xs sm:text-sm font-black text-cyan-300 leading-none">#{stepMap.e1.step}</span>
-                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.e1.time}</span>
+                          <div className="flex items-center gap-1 leading-none">
+                            <span className="text-xs sm:text-sm font-black text-cyan-300">#{stepMap.e1.step}</span>
+                            <span className="text-[9px] font-bold text-slate-200">{stepMap.e1.dateStr}</span>
+                          </div>
+                          <span className="text-[8px] font-semibold text-cyan-400/90 tracking-tight leading-none mt-0.5">
+                            {stepMap.e1.timeAgo}
+                          </span>
                         </div>
                       )}
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -1188,14 +1251,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
                     {/* TP1 (Precio Editable + % de Ganancia Editable + USD Profit) */}
                     <td rowSpan={2} className="relative py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
-                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {/* Badge de Paso Tocado en Esquina Superior con Número, Fecha/Hora y Tiempo Transcurrido */}
                       {stepMap.tp1 && (
                         <div 
-                          className="absolute top-1 right-1 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-emerald-400 text-emerald-200 font-mono shadow-lg shadow-black/80 ring-1 ring-emerald-400/50"
-                          title={`Paso #${stepMap.tp1.step} ejecutado a las ${stepMap.tp1.time}`}
+                          className="absolute -top-1 right-0.5 z-20 flex flex-col items-end px-1.5 py-0.5 rounded bg-slate-950/95 border border-emerald-400 text-emerald-200 font-mono shadow-md shadow-black/90 ring-1 ring-emerald-400/40"
+                          title={stepMap.tp1.fullTitle}
                         >
-                          <span className="text-xs sm:text-sm font-black text-emerald-300 leading-none">#{stepMap.tp1.step}</span>
-                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.tp1.time}</span>
+                          <div className="flex items-center gap-1 leading-none">
+                            <span className="text-xs sm:text-sm font-black text-emerald-300">#{stepMap.tp1.step}</span>
+                            <span className="text-[9px] font-bold text-slate-200">{stepMap.tp1.dateStr}</span>
+                          </div>
+                          <span className="text-[8px] font-semibold text-emerald-400/90 tracking-tight leading-none mt-0.5">
+                            {stepMap.tp1.timeAgo}
+                          </span>
                         </div>
                       )}
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -1239,14 +1307,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
                     {/* TP2 (Precio Editable + % de Activos Editable + USD Profit) */}
                     <td rowSpan={2} className="relative py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
-                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {/* Badge de Paso Tocado en Esquina Superior con Número, Fecha/Hora y Tiempo Transcurrido */}
                       {stepMap.tp2 && (
                         <div 
-                          className="absolute top-1 right-1 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-emerald-400 text-emerald-200 font-mono shadow-lg shadow-black/80 ring-1 ring-emerald-400/50"
-                          title={`Paso #${stepMap.tp2.step} ejecutado a las ${stepMap.tp2.time}`}
+                          className="absolute -top-1 right-0.5 z-20 flex flex-col items-end px-1.5 py-0.5 rounded bg-slate-950/95 border border-emerald-400 text-emerald-200 font-mono shadow-md shadow-black/90 ring-1 ring-emerald-400/40"
+                          title={stepMap.tp2.fullTitle}
                         >
-                          <span className="text-xs sm:text-sm font-black text-emerald-300 leading-none">#{stepMap.tp2.step}</span>
-                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.tp2.time}</span>
+                          <div className="flex items-center gap-1 leading-none">
+                            <span className="text-xs sm:text-sm font-black text-emerald-300">#{stepMap.tp2.step}</span>
+                            <span className="text-[9px] font-bold text-slate-200">{stepMap.tp2.dateStr}</span>
+                          </div>
+                          <span className="text-[8px] font-semibold text-emerald-400/90 tracking-tight leading-none mt-0.5">
+                            {stepMap.tp2.timeAgo}
+                          </span>
                         </div>
                       )}
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -1290,14 +1363,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
                     {/* TP3 (Precio Editable + % de Activos Editable + USD Profit) */}
                     <td rowSpan={2} className="relative py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 font-mono align-middle">
-                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {/* Badge de Paso Tocado en Esquina Superior con Número, Fecha/Hora y Tiempo Transcurrido */}
                       {stepMap.tp3 && (
                         <div 
-                          className="absolute top-1 right-1 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-emerald-400 text-emerald-200 font-mono shadow-lg shadow-black/80 ring-1 ring-emerald-400/50"
-                          title={`Paso #${stepMap.tp3.step} ejecutado a las ${stepMap.tp3.time}`}
+                          className="absolute -top-1 right-0.5 z-20 flex flex-col items-end px-1.5 py-0.5 rounded bg-slate-950/95 border border-emerald-400 text-emerald-200 font-mono shadow-md shadow-black/90 ring-1 ring-emerald-400/40"
+                          title={stepMap.tp3.fullTitle}
                         >
-                          <span className="text-xs sm:text-sm font-black text-emerald-300 leading-none">#{stepMap.tp3.step}</span>
-                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.tp3.time}</span>
+                          <div className="flex items-center gap-1 leading-none">
+                            <span className="text-xs sm:text-sm font-black text-emerald-300">#{stepMap.tp3.step}</span>
+                            <span className="text-[9px] font-bold text-slate-200">{stepMap.tp3.dateStr}</span>
+                          </div>
+                          <span className="text-[8px] font-semibold text-emerald-400/90 tracking-tight leading-none mt-0.5">
+                            {stepMap.tp3.timeAgo}
+                          </span>
                         </div>
                       )}
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -1346,14 +1424,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     className="transition-colors duration-200 cursor-pointer bg-slate-950/60"
                   >
                     <td colSpan={3} className="relative py-1.5 px-3 text-center bg-gradient-to-r from-rose-950/80 via-rose-900/60 to-rose-950/80 border-r border-slate-800 border-t border-rose-800/60 font-mono shadow-inner">
-                      {/* Badge de Paso Tocado en Esquina Superior */}
+                      {/* Badge de Paso Tocado en Esquina Superior con Número, Fecha/Hora y Tiempo Transcurrido */}
                       {stepMap.sl && (
                         <div 
-                          className="absolute top-0.5 right-1 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-rose-400 text-rose-200 font-mono shadow-lg ring-1 ring-rose-400/50"
-                          title={`Paso #${stepMap.sl.step} ejecutado a las ${stepMap.sl.time}`}
+                          className="absolute -top-1 right-1 z-20 flex flex-col items-end px-1.5 py-0.5 rounded bg-slate-950/95 border border-rose-400 text-rose-200 font-mono shadow-md shadow-black/90 ring-1 ring-rose-400/40"
+                          title={stepMap.sl.fullTitle}
                         >
-                          <span className="text-xs font-black text-rose-300 leading-none">#{stepMap.sl.step}</span>
-                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.sl.time}</span>
+                          <div className="flex items-center gap-1 leading-none">
+                            <span className="text-xs font-black text-rose-300">#{stepMap.sl.step}</span>
+                            <span className="text-[9px] font-bold text-slate-200">{stepMap.sl.dateStr}</span>
+                          </div>
+                          <span className="text-[8px] font-semibold text-rose-400/90 tracking-tight leading-none mt-0.5">
+                            {stepMap.sl.timeAgo}
+                          </span>
                         </div>
                       )}
                       <div className="flex items-center justify-between gap-2 px-1">
