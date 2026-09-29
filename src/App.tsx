@@ -21,6 +21,7 @@ import { SheetsConfigModal } from './components/SheetsConfigModal';
 import { AddStrategyModal } from './components/AddStrategyModal';
 import { DcaSimulatorModal } from './components/DcaSimulatorModal';
 import { MultiStrategyComparisonModal } from './components/MultiStrategyComparisonModal';
+import { TradeFlowchartModal } from './components/TradeFlowchartModal';
 import { calculateRiskReward } from './utils/riskReward';
 import { INITIAL_STRATEGIES, INITIAL_ORDERS } from './data/initialStrategies';
 import { TradeLogService } from './services/tradeLogService';
@@ -63,6 +64,7 @@ export default function App() {
   const [isDcaModalOpen, setIsDcaModalOpen] = useState<boolean>(false);
   const [selectedStrategyIds, setSelectedStrategyIds] = useState<Set<number>>(new Set());
   const [isComparisonOpen, setIsComparisonOpen] = useState<boolean>(false);
+  const [isFlowchartOpen, setIsFlowchartOpen] = useState<boolean>(false);
 
   // Trade History Log State
   const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>(() => TradeLogService.getLogs());
@@ -505,6 +507,7 @@ export default function App() {
         activeTab={activeMainTab}
         onTabChange={setActiveMainTab}
         onOpenGateway={() => setShowGateway(true)}
+        onOpenFlowchart={() => setIsFlowchartOpen(true)}
       />
 
       {/* Notificación Flotante de Depuración de Caché */}
@@ -639,6 +642,12 @@ export default function App() {
         strategies={selectedStrategiesForComparison}
         onRemoveStrategy={handleRemoveFromComparison}
         onClearSelection={handleClearSelection}
+      />
+
+      <TradeFlowchartModal
+        isOpen={isFlowchartOpen}
+        onClose={() => setIsFlowchartOpen(false)}
+        strategy={sortedAndFilteredStrategies[0] || strategies[0] || null}
       />
 
       {/* Footer */}

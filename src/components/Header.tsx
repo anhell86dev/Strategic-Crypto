@@ -8,7 +8,8 @@ import {
   Plus, 
   Activity,
   CheckCircle2, 
-  AlertCircle
+  AlertCircle,
+  GitBranch
 } from 'lucide-react';
 import { DensityToggle } from './DensityToggle';
 import { ConnectionStatus } from '../types';
@@ -29,6 +30,7 @@ interface HeaderProps {
   activeTab?: 'radar' | 'binance';
   onTabChange?: (tab: 'radar' | 'binance') => void;
   onOpenGateway?: () => void;
+  onOpenFlowchart?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -44,7 +46,8 @@ export const Header: React.FC<HeaderProps> = ({
   tickCount,
   activeTab = 'radar',
   onTabChange,
-  onOpenGateway
+  onOpenGateway,
+  onOpenFlowchart
 }) => {
 
   const formatTime = (d: Date | null) => {
@@ -203,6 +206,18 @@ export const Header: React.FC<HeaderProps> = ({
               {formatTime(lastSyncTime)}
             </div>
           </div>
+
+          {/* Flujograma Táctico Button */}
+          {onOpenFlowchart && (
+            <button
+              onClick={onOpenFlowchart}
+              title="Ver Flujograma Visual con los diferentes caminos tácticos tras la entrada"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-bold text-cyan-300 bg-cyan-950/70 hover:bg-cyan-900/90 border border-cyan-500/50 hover:border-cyan-400 rounded-xl transition-all shadow-md font-mono cursor-pointer"
+            >
+              <GitBranch className="w-4 h-4 text-cyan-400" />
+              <span className="hidden lg:inline">Flujograma Táctico</span>
+            </button>
+          )}
 
           {/* Add Strategy Button */}
           <button

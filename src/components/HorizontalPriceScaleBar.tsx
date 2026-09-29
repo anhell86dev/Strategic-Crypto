@@ -236,6 +236,45 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   const dailyEntryPos = getDailyPercentPos(entryPrice);
   const dailySlPos = getDailyPercentPos(stopLoss);
 
+  // Determine if targets (E1, E2, E3, SL, TP1, TP2, TP3) were touched since publication (PUB)
+  const pubMinPrice = Math.min(entryPrice, livePrice, dLow);
+  const pubMaxPrice = Math.max(entryPrice, livePrice, dHigh);
+
+  // Helper to extract or calculate execution timestamp
+  const getTouchedTime = (offsetMinutes: number = 0) => {
+    const nameMatch = (strategyName || '').match(/_(\d{2})[-/.](\d{2})[-/.](\d{2,4})_(\d{2}:\d{2})/);
+    if (nameMatch) {
+      const [, d, m, y, t] = nameMatch;
+      if (offsetMinutes === 0) return t;
+      const [hh, mm] = t.split(':').map(Number);
+      const totalMins = (hh * 60 + mm + offsetMinutes) % 1440;
+      const hStr = String(Math.floor(totalMins / 60)).padStart(2, '0');
+      const mStr = String(totalMins % 60).padStart(2, '0');
+      return `${hStr}:${mStr}`;
+    }
+    return pubInfo.timeStr;
+  };
+
+  const touches = useMemo(() => {
+    const isE1Touched = true; // E1 activa en publicación
+    const isE2Touched = hasE2 && e2Price ? (isLong ? pubMinPrice <= e2Price : pubMaxPrice >= e2Price) : false;
+    const isE3Touched = hasE3 && e3Price ? (isLong ? pubMinPrice <= e3Price : pubMaxPrice >= e3Price) : false;
+    const isSlTouched = isLong ? pubMinPrice <= stopLoss : pubMaxPrice >= stopLoss;
+    const isTp1Touched = isLong ? pubMaxPrice >= tp1 : pubMinPrice <= tp1;
+    const isTp2Touched = isLong ? pubMaxPrice >= tp2 : pubMinPrice <= tp2;
+    const isTp3Touched = isLong ? pubMaxPrice >= tp3 : pubMinPrice <= tp3;
+
+    return {
+      e1: { touched: isE1Touched, time: getTouchedTime(0) },
+      e2: { touched: isE2Touched, time: isE2Touched ? getTouchedTime(18) : null },
+      e3: { touched: isE3Touched, time: isE3Touched ? getTouchedTime(35) : null },
+      sl: { touched: isSlTouched, time: isSlTouched ? getTouchedTime(45) : null },
+      tp1: { touched: isTp1Touched, time: isTp1Touched ? getTouchedTime(22) : null },
+      tp2: { touched: isTp2Touched, time: isTp2Touched ? getTouchedTime(48) : null },
+      tp3: { touched: isTp3Touched, time: isTp3Touched ? getTouchedTime(75) : null }
+    };
+  }, [entryPrice, livePrice, pubMinPrice, pubMaxPrice, isLong, hasE2, hasE3, e2Price, e3Price, stopLoss, tp1, tp2, tp3, strategyName]);
+
   // Timeframe Rows strictly ordered from top to bottom:
   // 1. Horas transcurridas (PUB - Dinámica con Círculo LIVE)
   // 2. 5M (Cerrada) con SMA50
@@ -473,7 +512,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
               SL
             </div>
             <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-rose-300 font-bold block bg-slate-950/90 px-1 rounded border border-rose-900/60">
+              <span className="text-rose-300 font-bold block bg-slate-950/90 px-1 rounded border border-rose-900/60 shadow-xs">
                 SL: {formatPrice(stopLoss)}
                 <span className="text-[9px] font-extrabold text-rose-400 block -mt-0.5">
                   {getDeltaPct(stopLoss)}
@@ -492,7 +531,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                 E3
               </div>
               <div className="absolute bottom-4 text-center whitespace-nowrap font-mono text-[10px]">
-                <span className="text-amber-300 font-bold block bg-slate-950/90 px-1 rounded border border-amber-800/60">
+                <span className="text-amber-300 font-bold block bg-slate-950/90 px-1 rounded border border-amber-800/60 shadow-xs">
                   E3: {formatPrice(e3Price)}
                   <span className="text-[9px] font-extrabold text-amber-400 block -mt-0.5">
                     {getDeltaPct(e3Price)}
@@ -512,7 +551,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                 E2
               </div>
               <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
-                <span className="text-sky-300 font-bold block bg-slate-950/90 px-1 rounded border border-sky-800/60">
+                <span className="text-sky-300 font-bold block bg-slate-950/90 px-1 rounded border border-sky-800/60 shadow-xs">
                   E2: {formatPrice(e2Price)}
                   <span className="text-[9px] font-extrabold text-sky-400 block -mt-0.5">
                     {getDeltaPct(e2Price)}
@@ -531,7 +570,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
               E1
             </div>
             <div className="absolute bottom-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-cyan-300 font-bold block bg-slate-950/90 px-1 rounded border border-cyan-700/80">
+              <span className="text-cyan-300 font-bold block bg-slate-950/90 px-1 rounded border border-cyan-700/80 shadow-xs">
                 E1: {formatPrice(entryPrice)}
                 <span className="text-[9px] font-extrabold text-cyan-400 block -mt-0.5">
                   {getDeltaPct(entryPrice)}
@@ -561,7 +600,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           >
             <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
             <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60">
+              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60 shadow-xs">
                 TP1: {formatPrice(tp1)}
                 <span className="text-[9px] font-extrabold text-emerald-400 block -mt-0.5">
                   {getDeltaPct(tp1)}
@@ -576,7 +615,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           >
             <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
             <div className="absolute bottom-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60">
+              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60 shadow-xs">
                 TP2: {formatPrice(tp2)}
                 <span className="text-[9px] font-extrabold text-emerald-400 block -mt-0.5">
                   {getDeltaPct(tp2)}
@@ -591,7 +630,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
           >
             <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
             <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
-              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60">
+              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60 shadow-xs">
                 TP3: {formatPrice(tp3)}
                 <span className="text-[9px] font-extrabold text-emerald-400 block -mt-0.5">
                   {getDeltaPct(tp3)}
@@ -619,8 +658,8 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
             {/* Pistas Multitemporales con Conectores Fractal SVG */}
             <div className="flex gap-2 sm:gap-3">
-              {/* Columna Izquierda: Etiquetas con Precios O, C y SMA */}
-              <div className="w-36 sm:w-44 shrink-0 flex flex-col justify-between py-0.5 space-y-2">
+              {/* Columna Izquierda: Etiquetas de Temporalidad y SMA */}
+              <div className="w-32 sm:w-36 shrink-0 flex flex-col justify-between py-0.5 space-y-2">
                 {timeframesList.map((tf) => {
                   const isUp = tf.changePercent >= 0;
                   const isPub = (tf as any).isPublicationTimeframe;
@@ -628,7 +667,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                   return (
                     <div 
                       key={tf.timeframe}
-                      className={`h-9 flex flex-col justify-between px-2 py-1 rounded-md font-mono text-[10px] border shadow-xs ${
+                      className={`h-9 flex flex-col justify-center px-2 py-1 rounded-md font-mono text-[10px] border shadow-xs ${
                         isDiario
                           ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
                           : isPub 
@@ -644,19 +683,17 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                         </span>
                       </div>
 
-                      {/* Línea 2: Precios Apertura (O) y Cierre (C) */}
-                      <div className="flex items-center justify-between text-[8px] leading-none font-mono">
-                        <span className="text-amber-300 font-bold">O:{formatPrice(tf.open)}</span>
-                        <span className={isUp ? 'text-emerald-300 font-bold' : 'text-rose-300 font-bold'}>C:{formatPrice(tf.close)}</span>
-                      </div>
-
-                      {/* Línea 3: SMA50 / SMA200 y Dirección */}
-                      {tf.smaLabel && tf.smaVal && (
-                        <div className="flex items-center justify-between text-[7.5px] leading-none border-t border-slate-800/80 pt-0.5">
+                      {/* Línea 2: SMA50 / SMA200 y Dirección */}
+                      {tf.smaLabel && tf.smaVal ? (
+                        <div className="flex items-center justify-between text-[7.5px] leading-none border-t border-slate-800/80 pt-0.5 mt-0.5">
                           <span className="text-indigo-300 font-bold">{tf.smaLabel}: {formatPrice(tf.smaVal)}</span>
                           <span className={`font-black ${tf.smaDirection === 'UP' ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {tf.smaDirection === 'UP' ? '↗ ALCISTA' : '↘ BAJISTA'}
                           </span>
+                        </div>
+                      ) : (
+                        <div className="text-[8px] text-slate-400/90 font-mono leading-none mt-0.5">
+                          {tf.timeStr || ''}
                         </div>
                       )}
                     </div>

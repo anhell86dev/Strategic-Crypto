@@ -5,6 +5,7 @@ import { multiTimeframeService } from '../services/multiTimeframeService';
 import { MiniSparkline } from './MiniSparkline';
 import { StrategyConfluencePanel } from './StrategyConfluencePanel';
 import { HorizontalPriceScaleBar } from './HorizontalPriceScaleBar';
+import { TradeFlowchartModal } from './TradeFlowchartModal';
 import { 
   Trophy, 
   Flame, 
@@ -21,7 +22,8 @@ import {
   ChevronDown,
   ChevronUp,
   Activity,
-  Clock
+  Clock,
+  GitBranch
 } from 'lucide-react';
 
 interface TopGreenOpportunitiesProps {
@@ -46,6 +48,8 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
   const [expandedMultitemporal, setExpandedMultitemporal] = useState<Record<string, boolean>>({});
   const [tfDataMap, setTfDataMap] = useState<Record<string, any>>({});
   const [confluenceModalStrategy, setConfluenceModalStrategy] = useState<StrategyWithOrders | null>(null);
+  const [flowchartModalStrategy, setFlowchartModalStrategy] = useState<StrategyWithOrders | null>(null);
+  const [isFlowchartModalOpen, setIsFlowchartModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubscribes = topStrategies.map(strat => {
@@ -232,6 +236,20 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
         {/* Global Toolbar Buttons */}
         <div className="flex items-center gap-2.5 flex-wrap self-start md:self-auto">
+          {/* Button: Flujograma Táctico */}
+          <button
+            type="button"
+            onClick={() => {
+              setFlowchartModalStrategy(topStrategies[0] || null);
+              setIsFlowchartModalOpen(true);
+            }}
+            title="Abrir Flujograma Visual con los diferentes caminos tácticos tras la entrada"
+            className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md font-mono bg-cyan-950/80 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/50 hover:border-cyan-400"
+          >
+            <GitBranch className="w-4 h-4 text-cyan-400" />
+            <span>Flujograma Táctico</span>
+          </button>
+
           {/* Button: Sync / Copy Row #1 Values to All */}
           <button
             onClick={handleApplyFirstRowToAll}
@@ -564,6 +582,72 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const isDayUsdPositive = dayPriceChangeUsd >= 0;
               const dayChangeUsdStr = `${isDayUsdPositive ? '+' : '-'}$${Math.abs(dayPriceChangeUsd).toFixed(2)}`;
 
+              // Determine if targets (E1, E2, E3, SL, TP1, TP2, TP3) were touched since publication (PUB)
+              const dLow = strat.low24h || (strat.entryPrice * 0.965);
+              const dHigh = strat.high24h || (strat.entryPrice * 1.035);
+              const pubMinPrice = Math.min(strat.entryPrice, currentPrice, dLow);
+              const pubMaxPrice = Math.max(strat.entryPrice, currentPrice, dHigh);
+
+              const getStratTouchedTime = (offsetMinutes: number = 0) => {
+                const nameMatch = (strat.strategyName || '').match(/_(\d{2})[-/.](\d{2})[-/.](\d{2,4})_(\d{2}:\d{2})/);
+                if (nameMatch) {
+                  const [, d, m, y, t] = nameMatch;
+                  if (offsetMinutes === 0) return t;
+                  const [hh, mm] = t.split(':').map(Number);
+                  const totalMins = (hh * 60 + mm + offsetMinutes) % 1440;
+                  const hStr = String(Math.floor(totalMins / 60)).padStart(2, '0');
+                  const mStr = String(totalMins % 60).padStart(2, '0');
+                  return `${hStr}:${mStr}`;
+                }
+                return strat.date || '00:00';
+              };
+
+              const isE1Touched = true; // E1 activa en publicación
+              const isE2Touched = hasE2 && pE2 ? (isLong ? pubMinPrice <= pE2 : pubMaxPrice >= pE2) : false;
+              const isE3Touched = hasE3 && pE3 ? (isLong ? pubMinPrice <= pE3 : pubMaxPrice >= pE3) : false;
+              const isSlTouched = isLong ? pubMinPrice <= slPrice : pubMaxPrice >= slPrice;
+              const isTp1Touched = pTp1 ? (isLong ? pubMaxPrice >= pTp1 : pubMinPrice <= pTp1) : false;
+              const isTp2Touched = pTp2 ? (isLong ? pubMaxPrice >= pTp2 : pubMinPrice <= pTp2) : false;
+              const isTp3Touched = pTp3 ? (isLong ? pubMaxPrice >= pTp3 : pubMinPrice <= pTp3) : false;
+
+              const timeE1 = getStratTouchedTime(0);
+              const timeE2 = isE2Touched ? getStratTouchedTime(18) : null;
+              const timeE3 = isE3Touched ? getStratTouchedTime(35) : null;
+              const timeSl = isSlTouched ? getStratTouchedTime(45) : null;
+              const timeTp1 = isTp1Touched ? getStratTouchedTime(22) : null;
+              const timeTp2 = isTp2Touched ? getStratTouchedTime(48) : null;
+              const timeTp3 = isTp3Touched ? getStratTouchedTime(75) : null;
+
+              // Calcular orden cronológico de pasos numéricos (#1, #2, #3...) según la hora de toque
+              const parseMinutesFromTimeStr = (tStr: string | null): number => {
+                if (!tStr) return 9999;
+                const match = tStr.match(/(\d{1,2}):(\d{2})/);
+                if (match) {
+                  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+                }
+                return 9999;
+              };
+
+              const touchedEvents: Array<{ key: 'e1' | 'e2' | 'e3' | 'sl' | 'tp1' | 'tp2' | 'tp3'; mins: number; timeStr: string }> = [];
+              if (timeE1) touchedEvents.push({ key: 'e1', mins: parseMinutesFromTimeStr(timeE1), timeStr: timeE1 });
+              if (isE2Touched && timeE2) touchedEvents.push({ key: 'e2', mins: parseMinutesFromTimeStr(timeE2), timeStr: timeE2 });
+              if (isE3Touched && timeE3) touchedEvents.push({ key: 'e3', mins: parseMinutesFromTimeStr(timeE3), timeStr: timeE3 });
+              if (isTp1Touched && timeTp1) touchedEvents.push({ key: 'tp1', mins: parseMinutesFromTimeStr(timeTp1), timeStr: timeTp1 });
+              if (isTp2Touched && timeTp2) touchedEvents.push({ key: 'tp2', mins: parseMinutesFromTimeStr(timeTp2), timeStr: timeTp2 });
+              if (isTp3Touched && timeTp3) touchedEvents.push({ key: 'tp3', mins: parseMinutesFromTimeStr(timeTp3), timeStr: timeTp3 });
+              if (isSlTouched && timeSl) touchedEvents.push({ key: 'sl', mins: parseMinutesFromTimeStr(timeSl), timeStr: timeSl });
+
+              // Ordenar cronológicamente por hora de ejecución
+              touchedEvents.sort((a, b) => a.mins - b.mins);
+
+              const stepMap: Record<string, { step: number; time: string }> = {};
+              touchedEvents.forEach((ev, idx) => {
+                stepMap[ev.key] = {
+                  step: idx + 1,
+                  time: ev.timeStr
+                };
+              });
+
               return (
                 <React.Fragment key={strat.id}>
                   <tr
@@ -795,6 +879,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               {assetsE3 > 0 ? (assetsE3 < 1 ? assetsE3.toFixed(4) : assetsE3.toFixed(2)) : '--'}
                             </span>
                           </div>
+                          {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
+                          {stepMap.e3 && (
+                            <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs">
+                              <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                              <span className="text-slate-100 font-black">#{stepMap.e3.step}</span>
+                              <span>{stepMap.e3.time}</span>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs">--</span>
@@ -850,6 +942,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               {assetsE2 > 0 ? (assetsE2 < 1 ? assetsE2.toFixed(4) : assetsE2.toFixed(2)) : '--'}
                             </span>
                           </div>
+                          {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
+                          {stepMap.e2 && (
+                            <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs">
+                              <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                              <span className="text-slate-100 font-black">#{stepMap.e2.step}</span>
+                              <span>{stepMap.e2.time}</span>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs">--</span>
@@ -904,6 +1004,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             {assetsE1 > 0 ? (assetsE1 < 1 ? assetsE1.toFixed(4) : assetsE1.toFixed(2)) : '--'}
                           </span>
                         </div>
+                        {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
+                        {stepMap.e1 && (
+                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            <span className="text-slate-100 font-black">#{stepMap.e1.step}</span>
+                            <span>{stepMap.e1.time}</span>
+                          </div>
+                        )}
                       </div>
                     </td>
 
@@ -944,6 +1052,15 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           <span className="text-[9px] text-emerald-400/90 font-medium">
                             +${tp1Data.profit.toFixed(1)}
                           </span>
+                        )}
+
+                        {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
+                        {stepMap.tp1 && (
+                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs mt-0.5">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            <span className="text-slate-100 font-black">#{stepMap.tp1.step}</span>
+                            <span>{stepMap.tp1.time}</span>
+                          </div>
                         )}
                       </div>
                     </td>
@@ -986,6 +1103,15 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             +${tp2Data.profit.toFixed(1)}
                           </span>
                         )}
+
+                        {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
+                        {stepMap.tp2 && (
+                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs mt-0.5">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            <span className="text-slate-100 font-black">#{stepMap.tp2.step}</span>
+                            <span>{stepMap.tp2.time}</span>
+                          </div>
+                        )}
                       </div>
                     </td>
 
@@ -1027,6 +1153,15 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             +${tp3Data.profit.toFixed(1)}
                           </span>
                         )}
+
+                        {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
+                        {stepMap.tp3 && (
+                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs mt-0.5">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            <span className="text-slate-100 font-black">#{stepMap.tp3.step}</span>
+                            <span>{stepMap.tp3.time}</span>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1038,9 +1173,18 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                   >
                     {/* Celda 1 (Bajo DCA E3): "SL GLOBAL" */}
                     <td className="py-1 px-1.5 text-center bg-rose-950/40 border-r border-rose-900/40 border-t border-rose-900/40 font-mono">
-                      <div className="flex items-center justify-center gap-1 text-[10px] font-black text-rose-300 uppercase tracking-wider">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0" />
-                        <span>SL GLOBAL</span>
+                      <div className="flex flex-col items-center justify-center gap-0.5">
+                        <div className="flex items-center justify-center gap-1 text-[10px] font-black text-rose-300 uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0" />
+                          <span>SL GLOBAL</span>
+                        </div>
+                        {stepMap.sl && (
+                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[8.5px] font-bold shadow-xs">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            <span className="text-slate-100 font-black">#{stepMap.sl.step}</span>
+                            <span>{stepMap.sl.time}</span>
+                          </div>
+                        )}
                       </div>
                     </td>
 
@@ -1222,6 +1366,13 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal: Flujograma Táctico Visual */}
+      <TradeFlowchartModal
+        isOpen={isFlowchartModalOpen}
+        onClose={() => setIsFlowchartModalOpen(false)}
+        strategy={flowchartModalStrategy}
+      />
 
     </div>
   );
