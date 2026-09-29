@@ -976,7 +976,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               {/* Línea horizontal central de separación / riel guía */}
                               <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-[1px] bg-slate-500/25 pointer-events-none z-0" />
 
-                              {/* BARRA HORIZONTAL DE RELLENO DEL PRECIO LIVE (Medida desde E1 o BE Global) */}
+                              {/* BARRA HORIZONTAL DE RELLENO DEL PRECIO LIVE CON MOVIMIENTO DIRECCIONAL */}
                               {posPct >= refEntryPosPct ? (
                                 <div 
                                   className="absolute top-0 bottom-0 transition-all duration-300 pointer-events-none z-20 overflow-hidden"
@@ -985,8 +985,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                                     width: `${Math.max(1, posPct - refEntryPosPct)}%` 
                                   }}
                                 >
-                                  <div className="w-full h-full backdrop-brightness-125 bg-gradient-to-r from-emerald-500/40 via-emerald-400/50 to-white/70 shadow-[inset_0_0_12px_rgba(52,211,153,0.5)]" />
-                                  <div className="absolute right-0 top-0 bottom-0 w-[3px] bg-white shadow-[0_0_14px_#ffffff]" />
+                                  {/* Fondo degradado esmeralda */}
+                                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/50 via-emerald-400/60 to-emerald-200/90 shadow-[inset_0_0_12px_rgba(52,211,153,0.6)]" />
+                                  {/* Flujo animado de líneas diagonales hacia la derecha */}
+                                  <div className="absolute inset-0 animate-flow-bar-right opacity-70" />
+                                  {/* Micro flechas direccionales hacia la derecha */}
+                                  <div className="absolute inset-0 flex items-center justify-around overflow-hidden opacity-60 text-[11px] font-black text-white select-none animate-directional-right">
+                                    <span>›</span><span>›</span><span>›</span><span>›</span>
+                                  </div>
+                                  {/* Cursor iluminado con ping en el extremo derecho */}
+                                  <div className="absolute right-0 top-0 bottom-0 w-[4px] bg-white shadow-[0_0_16px_#34d399] z-10 flex items-center justify-center">
+                                    <span className="absolute -right-1 text-[8px] text-white font-black animate-directional-right">▶</span>
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping absolute" />
+                                  </div>
                                 </div>
                               ) : (
                                 <div 
@@ -996,8 +1007,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                                     width: `${Math.max(1, refEntryPosPct - posPct)}%` 
                                   }}
                                 >
-                                  <div className="w-full h-full backdrop-brightness-125 bg-gradient-to-r from-white/70 via-rose-400/50 to-rose-500/40 shadow-[inset_0_0_12px_rgba(244,63,94,0.5)]" />
-                                  <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-white shadow-[0_0_14px_#ffffff]" />
+                                  {/* Fondo degradado rosa/rojo */}
+                                  <div className="absolute inset-0 bg-gradient-to-r from-rose-200/90 via-rose-400/60 to-rose-500/50 shadow-[inset_0_0_12px_rgba(244,63,94,0.6)]" />
+                                  {/* Flujo animado de líneas diagonales hacia la izquierda */}
+                                  <div className="absolute inset-0 animate-flow-bar-left opacity-70" />
+                                  {/* Micro flechas direccionales hacia la izquierda */}
+                                  <div className="absolute inset-0 flex items-center justify-around overflow-hidden opacity-60 text-[11px] font-black text-white select-none animate-directional-left">
+                                    <span>‹</span><span>‹</span><span>‹</span><span>‹</span>
+                                  </div>
+                                  {/* Cursor iluminado con ping en el extremo izquierdo */}
+                                  <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-white shadow-[0_0_16px_#f43f5e] z-10 flex items-center justify-center">
+                                    <span className="absolute -left-1 text-[8px] text-white font-black animate-directional-left">◀</span>
+                                    <span className="w-2.5 h-2.5 rounded-full bg-rose-300 animate-ping absolute" />
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1026,8 +1048,10 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               }`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${isAdvancing ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`} />
                                 <span>LIVE: {formatPrice(currentPrice)}</span>
-                                <span className="font-extrabold text-[9px]">
-                                  {isAdvancing ? '►►' : '◄◄'}
+                                <span className={`font-black text-[10px] tracking-wider inline-flex items-center gap-0.5 ${
+                                  isAdvancing ? 'text-emerald-300 animate-directional-right' : 'text-rose-300 animate-directional-left'
+                                }`}>
+                                  {isAdvancing ? '►►►' : '◄◄◄'}
                                 </span>
                               </div>
                             </div>

@@ -254,6 +254,79 @@
   animation: chevron-flow-left 1.2s linear infinite;
 }
 
+/* High-velocity directional streaming on the live price line */
+@keyframes flow-pattern-right {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 28px 0;
+  }
+}
+
+@keyframes flow-pattern-left {
+  0% {
+    background-position: 28px 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+@keyframes directional-pulse-right {
+  0%, 100% {
+    transform: translateX(0);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateX(3px);
+    opacity: 1;
+  }
+}
+
+@keyframes directional-pulse-left {
+  0%, 100% {
+    transform: translateX(0);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateX(-3px);
+    opacity: 1;
+  }
+}
+
+.animate-directional-right {
+  animation: directional-pulse-right 0.8s ease-in-out infinite;
+}
+
+.animate-directional-left {
+  animation: directional-pulse-left 0.8s ease-in-out infinite;
+}
+
+.animate-flow-bar-right {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.28) 0px,
+    rgba(255, 255, 255, 0.28) 6px,
+    transparent 6px,
+    transparent 14px
+  );
+  background-size: 19.8px 19.8px;
+  animation: flow-pattern-right 0.75s linear infinite;
+}
+
+.animate-flow-bar-left {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.28) 0px,
+    rgba(255, 255, 255, 0.28) 6px,
+    transparent 6px,
+    transparent 14px
+  );
+  background-size: 19.8px 19.8px;
+  animation: flow-pattern-left 0.75s linear infinite;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
