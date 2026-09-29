@@ -3,6 +3,7 @@ import { StrategyWithOrders } from '../types';
 import { indicatorsService } from '../services/indicatorsService';
 import { multiTimeframeService } from '../services/multiTimeframeService';
 import { MiniSparkline } from './MiniSparkline';
+import { StrategyConfluencePanel } from './StrategyConfluencePanel';
 import { 
   Trophy, 
   Flame, 
@@ -39,8 +40,10 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
   const [leverages, setLeverages] = useState<Record<string, number>>({});
   const [checkedEntries, setCheckedEntries] = useState<Record<string, { e1: boolean; e2: boolean; e3: boolean }>>({});
   const [customPrices, setCustomPrices] = useState<Record<string, { e1?: number; e2?: number; e3?: number; tp1?: number; tp2?: number; tp3?: number }>>({});
+  const [customTpClosePcts, setCustomTpClosePcts] = useState<Record<string, { tp1?: number; tp2?: number; tp3?: number }>>({});
   const [expandedMultitemporal, setExpandedMultitemporal] = useState<Record<string, boolean>>({});
   const [tfDataMap, setTfDataMap] = useState<Record<string, any>>({});
+  const [confluenceModalStrategy, setConfluenceModalStrategy] = useState<StrategyWithOrders | null>(null);
 
   useEffect(() => {
     const unsubscribes = topStrategies.map(strat => {
@@ -83,6 +86,18 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
       [key]: {
         ...prev[key],
         [level]: isNaN(val) || val <= 0 ? undefined : val
+      }
+    }));
+  };
+
+  const handleCustomTpClosePctChange = (stratId: string | number, tpKey: 'tp1' | 'tp2' | 'tp3', pctStr: string) => {
+    const key = String(stratId);
+    const pct = parseFloat(pctStr);
+    setCustomTpClosePcts(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        [tpKey]: isNaN(pct) ? undefined : Math.max(0, Math.min(100, pct))
       }
     }));
   };
@@ -248,8 +263,8 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
           {/* Table Header */}
           <thead>
             <tr className="border-b border-emerald-500/30 text-xs font-black text-slate-200 uppercase tracking-wider bg-slate-950/90">
-              <th rowSpan={2} className="py-1.5 px-2 text-center w-12 border-r border-slate-800">Rank</th>
-              <th rowSpan={2} className="py-1.5 px-2.5 border-r border-slate-800 min-w-[190px]">
+              <th rowSpan={2} className="py-1.5 px-2 text-center w-14 border-r border-slate-800">Rank</th>
+              <th rowSpan={2} className="py-1.5 px-2.5 border-r border-slate-800 w-60 max-w-[240px]">
                 Par / Dirección / Precio Live
               </th>
               <th rowSpan={2} className="py-1.5 px-2 text-center w-24 border-r border-slate-800">
@@ -276,7 +291,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                   </button>
                 </div>
               </th>
-              <th rowSpan={2} className="py-1.5 px-2 w-24 border-r border-slate-800 text-center">Semáforo</th>
+              <th rowSpan={2} className="py-1.5 px-2 w-32 border-r border-slate-800 text-center">Semáforo / Conf.</th>
 
               {/* Group 2: Entradas DCA */}
               <th colSpan={3} className="py-1.5 px-2 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
@@ -311,23 +326,23 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 </div>
               </th>
 
-              {/* Take Profit Sub-headers (precio / %) */}
+              {/* Take Profit Sub-headers (precio / % de cierre de activos) */}
               <th className="py-1 px-1.5 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[90px]">
                 <div className="flex flex-col items-center">
                   <span>TP1</span>
-                  <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / %</span>
+                  <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / % act</span>
                 </div>
               </th>
               <th className="py-1 px-1.5 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[90px]">
                 <div className="flex flex-col items-center">
                   <span>TP2</span>
-                  <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / %</span>
+                  <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / % act</span>
                 </div>
               </th>
               <th className="py-1 px-1.5 text-center text-emerald-300 bg-emerald-950/40 min-w-[90px]">
                 <div className="flex flex-col items-center">
                   <span>TP3</span>
-                  <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / %</span>
+                  <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / % act</span>
                 </div>
               </th>
             </tr>
@@ -346,7 +361,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const displayStrategyName = strat.strategyName || strat.coinName || symbolClean;
 
               const confluence = indicatorsService.getCompleteConfluence(strat);
-              const { futures, operational } = confluence;
+              const { futures, operational, overallScore, priorityBadge } = confluence;
 
               // Investment, Leverage & Nominal calculations
               const inv = getInvestment(strat.id);
@@ -489,9 +504,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 };
               };
 
-              const tp1Data = calcTpProfitActive(pTp1, tp1?.closePercentage || 40);
-              const tp2Data = calcTpProfitActive(pTp2, tp2?.closePercentage || 35);
-              const tp3Data = calcTpProfitActive(pTp3, tp3?.closePercentage || 25);
+              const stratCustomsClosePcts = customTpClosePcts[String(strat.id)];
+              const closePctTp1 = stratCustomsClosePcts?.tp1 ?? (tp1?.closePercentage || 50);
+              const closePctTp2 = stratCustomsClosePcts?.tp2 ?? (tp2?.closePercentage || 30);
+              const closePctTp3 = stratCustomsClosePcts?.tp3 ?? (tp3?.closePercentage || 20);
+
+              const tp1Data = calcTpProfitActive(pTp1, closePctTp1);
+              const tp2Data = calcTpProfitActive(pTp2, closePctTp2);
+              const tp3Data = calcTpProfitActive(pTp3, closePctTp3);
 
               // Target Gain % from Entry/BE
               const getTpGainPct = (targetPrice: number) => {
@@ -509,9 +529,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 e2Price: hasE2 ? pE2 : undefined,
                 e3Price: hasE3 ? pE3 : undefined,
                 orders: [
-                  { type: 'TP1', targetPrice: pTp1, closePercentage: tp1?.closePercentage || 40 },
-                  { type: 'TP2', targetPrice: pTp2, closePercentage: tp2?.closePercentage || 35 },
-                  { type: 'TP3', targetPrice: pTp3, closePercentage: tp3?.closePercentage || 25 },
+                  { type: 'TP1', targetPrice: pTp1, closePercentage: closePctTp1 },
+                  { type: 'TP2', targetPrice: pTp2, closePercentage: closePctTp2 },
+                  { type: 'TP3', targetPrice: pTp3, closePercentage: closePctTp3 },
                 ]
               };
 
@@ -531,11 +551,16 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 : 0;
               const slDiffPctStr = `${slDiffPct > 0 ? '+' : ''}${slDiffPct.toFixed(1)}%`;
 
-              const livePriceDiff = (currentPrice - refEntryPrice) * (isLong ? 1 : -1);
-              const liveChangePctStr = `${liveVsEntryPct >= 0 ? '+' : ''}${liveVsEntryPct.toFixed(2)}%`;
-              const liveChangeUsdStr = livePnlUsd !== 0 
-                ? `${livePnlUsd >= 0 ? '+' : '-'}$${Math.abs(livePnlUsd).toFixed(2)}`
-                : `${livePriceDiff >= 0 ? '+' : '-'}$${Math.abs(livePriceDiff).toFixed(2)}`;
+              // Métricas 24H del día para Precio Live (% y $)
+              const dayChangePct = strat.priceChangePercent24h ?? 0;
+              const isDayPositive = dayChangePct >= 0;
+              const dayChangePctStr = `${isDayPositive ? '+' : ''}${dayChangePct.toFixed(2)}%`;
+
+              const dayPriceChangeUsd = (strat.priceChange24h !== undefined && strat.priceChange24h !== null && !isNaN(strat.priceChange24h))
+                ? strat.priceChange24h
+                : (currentPrice - (currentPrice / (1 + (dayChangePct / 100))));
+              const isDayUsdPositive = dayPriceChangeUsd >= 0;
+              const dayChangeUsdStr = `${isDayUsdPositive ? '+' : '-'}$${Math.abs(dayPriceChangeUsd).toFixed(2)}`;
 
               return (
                 <React.Fragment key={strat.id}>
@@ -550,7 +575,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     }`}
                   >
                     {/* Rank Column */}
-                    <td rowSpan={2} className="py-1.5 px-2 text-center border-r border-slate-800 align-top">
+                    <td rowSpan={2} className="py-1.5 px-2 text-center border-r border-slate-800 align-top w-14">
                       <div className="flex items-center justify-center">
                         <span 
                           title={rankInfo.title}
@@ -563,7 +588,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* Par / Dirección / Precio Live / Estrategia / R:B Integrado */}
-                    <td rowSpan={2} className="py-1.5 px-2.5 border-r border-slate-800 align-top font-mono">
+                    <td rowSpan={2} className="py-1.5 px-2.5 border-r border-slate-800 align-top font-mono w-60 max-w-[240px]">
                       <div className="flex flex-col gap-1">
                         {/* Línea 1: PAR Dirección */}
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -580,22 +605,22 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           </span>
                         </div>
 
-                        {/* Línea 2: Precio Live %cambio $cambio (PRECIO MÁS GRANDE) */}
-                        <div className="flex items-center gap-2 flex-wrap">
+                        {/* Línea 2: Precio Live %cambio $cambio (vs 24h Día) */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-black text-white font-mono text-base sm:text-lg leading-none tracking-tight">
                             {formatPrice(currentPrice)}
                           </span>
                           <span className={`font-black text-xs font-mono px-1 py-0.5 rounded border ${
-                            isAdvancing 
+                            isDayPositive 
                               ? 'text-emerald-300 bg-emerald-950/80 border-emerald-600/60' 
                               : 'text-rose-300 bg-rose-950/80 border-rose-600/60'
                           }`}>
-                            {liveChangePctStr}
+                            {dayChangePctStr}
                           </span>
                           <span className={`text-[11px] font-bold font-mono ${
-                            isAdvancing ? 'text-emerald-400' : 'text-rose-400'
+                            isDayUsdPositive ? 'text-emerald-400' : 'text-rose-400'
                           }`}>
-                            {liveChangeUsdStr}
+                            {dayChangeUsdStr}
                           </span>
                         </div>
 
@@ -655,9 +680,10 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       </div>
                     </td>
 
-                    {/* Semáforo Verde & Badges FAPI (DESPUÉS DE APALANCAMIENTO) */}
-                    <td rowSpan={2} className="py-1.5 px-2 whitespace-nowrap border-r border-slate-800 align-top">
+                    {/* Semáforo Verde & Resumen de Confluencia */}
+                    <td rowSpan={2} className="py-1.5 px-2 whitespace-nowrap border-r border-slate-800 align-top w-32">
                       <div className="flex flex-col gap-1 items-center">
+                        {/* Semáforo Verde */}
                         <div 
                           className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-950 border border-emerald-400 text-emerald-300 shadow-sm w-fit"
                           title={strat.trafficLight?.reason || 'Semáforo Verde: Sin SL, sin TP previo, en zona'}
@@ -666,14 +692,29 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
                           </span>
-                          <span className="text-[11px] font-black uppercase tracking-wider text-emerald-300">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
                             {strat.trafficLight?.label || 'VERDE'}
                           </span>
                         </div>
 
+                        {/* Estado FAPI */}
                         <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold uppercase w-fit ${futures.futuresStatusColor}`}>
                           <span>🚦 {futures.futuresStatus}</span>
                         </div>
+
+                        {/* Resumen de Confluencia (Clic para abrir modal con confluencia total) */}
+                        <button 
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfluenceModalStrategy(strat);
+                          }}
+                          className="flex items-center justify-between gap-1.5 px-2 py-0.5 rounded bg-slate-900 hover:bg-cyan-950/80 border border-cyan-500/40 hover:border-cyan-400 text-[10px] font-mono shadow-xs transition-all cursor-pointer group/conf w-full max-w-[110px]"
+                          title="Clic para ver desglose completo de Confluencia Multicapa"
+                        >
+                          <span className="text-slate-400 font-bold group-hover/conf:text-cyan-200">Conf:</span>
+                          <span className="text-cyan-300 font-black group-hover/conf:text-cyan-100">{overallScore}% 🔍</span>
+                        </button>
                       </div>
                     </td>
 
@@ -854,17 +895,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           />
                         </div>
 
-                        {/* Fila 2: % de Ganancia Editable */}
+                        {/* Fila 2: % de Cierre de Activos Editable */}
                         <div className="flex items-center justify-center gap-0.5">
                           <span className="text-[10px] font-bold text-emerald-400/90 font-mono">%:</span>
                           <input
                             type="number"
-                            step="0.1"
+                            min="0"
+                            max="100"
+                            step="5"
                             placeholder="%"
-                            value={Number(tp1GainPct.toFixed(1))}
-                            onChange={(e) => handleCustomTpPctChange(strat.id, 'tp1', e.target.value, refEntryPrice, isLong)}
+                            value={closePctTp1}
+                            onChange={(e) => handleCustomTpClosePctChange(strat.id, 'tp1', e.target.value)}
                             className="w-14 px-1 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300"
-                            title="% de ganancia desde entrada/BE - Editable"
+                            title="% de activos totales a cerrar en TP1"
                           />
                         </div>
 
@@ -877,7 +920,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       </div>
                     </td>
 
-                    {/* TP2 (Precio Editable + % de Ganancia Editable + USD Profit) */}
+                    {/* TP2 (Precio Editable + % de Activos Editable + USD Profit) */}
                     <td rowSpan={2} className="py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                         {/* Fila 1: Precio TP2 Editable */}
@@ -893,17 +936,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           />
                         </div>
 
-                        {/* Fila 2: % de Ganancia Editable */}
+                        {/* Fila 2: % de Cierre de Activos Editable */}
                         <div className="flex items-center justify-center gap-0.5">
                           <span className="text-[10px] font-bold text-emerald-400/90 font-mono">%:</span>
                           <input
                             type="number"
-                            step="0.1"
+                            min="0"
+                            max="100"
+                            step="5"
                             placeholder="%"
-                            value={Number(tp2GainPct.toFixed(1))}
-                            onChange={(e) => handleCustomTpPctChange(strat.id, 'tp2', e.target.value, refEntryPrice, isLong)}
+                            value={closePctTp2}
+                            onChange={(e) => handleCustomTpClosePctChange(strat.id, 'tp2', e.target.value)}
                             className="w-14 px-1 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300"
-                            title="% de ganancia desde entrada/BE - Editable"
+                            title="% de activos totales a cerrar en TP2"
                           />
                         </div>
 
@@ -916,7 +961,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       </div>
                     </td>
 
-                    {/* TP3 (Precio Editable + % de Ganancia Editable + USD Profit) */}
+                    {/* TP3 (Precio Editable + % de Activos Editable + USD Profit) */}
                     <td rowSpan={2} className="py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 font-mono align-middle">
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                         {/* Fila 1: Precio TP3 Editable */}
@@ -932,17 +977,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           />
                         </div>
 
-                        {/* Fila 2: % de Ganancia Editable */}
+                        {/* Fila 2: % de Cierre de Activos Editable */}
                         <div className="flex items-center justify-center gap-0.5">
                           <span className="text-[10px] font-bold text-emerald-400/90 font-mono">%:</span>
                           <input
                             type="number"
-                            step="0.1"
+                            min="0"
+                            max="100"
+                            step="5"
                             placeholder="%"
-                            value={Number(tp3GainPct.toFixed(1))}
-                            onChange={(e) => handleCustomTpPctChange(strat.id, 'tp3', e.target.value, refEntryPrice, isLong)}
+                            value={closePctTp3}
+                            onChange={(e) => handleCustomTpClosePctChange(strat.id, 'tp3', e.target.value)}
                             className="w-14 px-1 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300"
-                            title="% de ganancia desde entrada/BE - Editable"
+                            title="% de activos totales a cerrar en TP3"
                           />
                         </div>
 
@@ -956,17 +1003,27 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
                   </tr>
 
-                  {/* Fila 2: Stop Loss Global cubriendo las 3 Entradas DCA (E3, E2, E1) */}
+                  {/* Fila 2: Stop Loss Global cubriendo las 3 Entradas DCA (E3, E2, E1) con SL GLOBAL en Celda 1 y Precio + % + $ unificados en Celda 2 */}
                   <tr
                     onClick={() => onSelectStrategy && onSelectStrategy(strat)}
                     className="transition-colors duration-200 cursor-pointer bg-slate-950/40"
                   >
-                    <td colSpan={3} className="py-1.5 px-2 text-center bg-rose-950/30 border-r border-slate-800 border-t border-rose-900/40 font-mono">
-                      <div className="flex items-center justify-center gap-1.5 text-xs font-mono font-bold text-rose-300">
+                    {/* Celda 1 (Bajo DCA E3): "SL GLOBAL" */}
+                    <td className="py-1 px-1.5 text-center bg-rose-950/40 border-r border-rose-900/40 border-t border-rose-900/40 font-mono">
+                      <div className="flex items-center justify-center gap-1 text-[10px] font-black text-rose-300 uppercase tracking-wider">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0" />
-                        <span>
-                          SL Global: Precio: <strong className="text-white font-black">{formatPrice(slPrice)}</strong> • %: <strong className="text-rose-200 font-black">{slDiffPctStr}</strong> • $: <strong className="text-rose-300 font-black">-${activeLoss > 0 ? activeLoss.toFixed(2) : '0.00'}</strong>
-                        </span>
+                        <span>SL GLOBAL</span>
+                      </div>
+                    </td>
+
+                    {/* Celda 2 (Bajo DCA E2 y E1 Unificada): PRECIO arriba, % y $ abajo */}
+                    <td colSpan={2} className="py-1 px-2 text-center bg-rose-950/20 border-r border-slate-800 border-t border-rose-900/40 font-mono">
+                      <div className="flex flex-col items-center justify-center gap-0.5">
+                        <span className="text-white font-black text-xs font-mono">{formatPrice(slPrice)}</span>
+                        <div className="flex items-center justify-center gap-1.5 text-[10px] font-mono font-bold">
+                          <span className="text-rose-300 font-black">{slDiffPctStr}</span>
+                          <span className="text-rose-400 font-bold">-${activeLoss > 0 ? activeLoss.toFixed(2) : '0.00'}</span>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -1049,21 +1106,26 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               : 'hover:bg-slate-900/80 bg-slate-950/40'
                           }`}
                         >
-                          {/* Cols 1 to 5: Reglas del Trading (En el espacio bajo Rank hasta Apalancamiento) */}
-                          <td colSpan={5} className="py-1.5 px-2.5 border-r border-slate-800 bg-slate-950/95 font-sans border-t-0 align-middle">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-cyan-950/90 border border-cyan-500/60 text-cyan-300 font-mono font-black text-[10px] uppercase tracking-wider shadow-sm shrink-0">
-                                <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-                                <span>Reglas del Trading</span>
-                              </span>
-                              <span className="text-slate-200 text-xs font-semibold leading-relaxed">
-                                {strat.tacticalRules || 'Mover SL a Breakeven al alcanzar TP1. Cerrar 50% en TP1 para asegurar ganancia.'}
-                              </span>
-                              {strat.tradeDiscipline && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/50 text-purple-300 text-[10px] font-mono shrink-0 shadow-xs">
-                                  <span>⚡</span>
-                                  <span>{strat.tradeDiscipline}</span>
+                          {/* Cols 1 to 5: Reglas del Trading (Límite estricto dentro de columnas 1 a 5 sin pasar hacia el gráfico) */}
+                          <td colSpan={5} className="py-2 px-3 border-r border-slate-800 bg-slate-950/95 font-sans border-t-0 align-middle">
+                            <div className="flex flex-col gap-2 w-full max-w-full">
+                              {/* Línea 1: Badge de Reglas + Texto explicativo completo */}
+                              <div className="flex items-start gap-2 flex-wrap">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-cyan-950/90 border border-cyan-500/60 text-cyan-300 font-mono font-black text-[10px] uppercase tracking-wider shadow-sm shrink-0">
+                                  <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                                  <span>Reglas del Trading</span>
                                 </span>
+                                <span className="text-slate-200 text-xs font-semibold leading-relaxed whitespace-normal break-words flex-1">
+                                  {strat.tacticalRules || 'Mover SL a Breakeven al alcanzar TP1. Cerrar 50% en TP1 para asegurar ganancia.'}
+                                </span>
+                              </div>
+
+                              {/* Línea 2: Disciplina Morada (Enmarcada dentro del ancho de las 5 columnas sin pasar hacia el gráfico) */}
+                              {strat.tradeDiscipline && (
+                                <div className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-950/80 border border-purple-500/50 text-purple-200 text-xs font-mono shadow-xs w-full whitespace-normal break-words leading-relaxed">
+                                  <span className="shrink-0 text-amber-300 font-bold">⚡</span>
+                                  <span className="whitespace-normal break-words flex-1">{strat.tradeDiscipline}</span>
+                                </div>
                               )}
                             </div>
                           </td>
@@ -1074,23 +1136,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               <span className="text-[10px] font-bold text-slate-400 font-mono uppercase tracking-wider">
                                 Rango Táctico (SL ➔ DCA ➔ TPs)
                               </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleMultitemporal(strat.id);
-                                }}
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer border ${
-                                  isMultiExpanded
-                                    ? 'bg-cyan-400 text-slate-950 border-cyan-300 font-black shadow-xs'
-                                    : 'bg-slate-900 text-cyan-300 border-slate-700 hover:border-cyan-500'
-                                }`}
-                                title="Ver mini gráfico"
-                              >
-                                <Activity className="w-3 h-3" />
-                                <span>{isMultiExpanded ? 'Ocultar Gráfica' : 'Mini Gráfico'}</span>
-                                {isMultiExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                              </button>
                             </div>
 
                             <div className="relative w-full pt-0 pb-0">
@@ -1196,37 +1241,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             </div>
                           </td>
                         </tr>
-
-                        {/* Fila Expandible Acordeón: Mini Gráfico en Vivo */}
-                        {isMultiExpanded && (
-                          <tr className="bg-slate-950 border-b-2 border-slate-800 transition-all">
-                            <td colSpan={11} className="py-2.5 px-3 bg-slate-950/95">
-                              <div className="rounded-xl border border-cyan-500/40 bg-slate-900/90 p-2.5 sm:p-3 shadow-xl">
-                                <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-800">
-                                  <div className="flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                                    <span className="text-xs font-black uppercase text-cyan-300 font-mono tracking-wider">
-                                      Mini Gráfico en Vivo: {symbolClean}/USDT
-                                    </span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleMultitemporal(strat.id);
-                                    }}
-                                    className="text-[10px] font-mono text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700 cursor-pointer"
-                                  >
-                                    ✕ Cerrar
-                                  </button>
-                                </div>
-                                <div className="h-32 w-full">
-                                  <MiniSparkline symbol={symbolClean} currentPrice={currentPrice} />
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
                       </React.Fragment>
                     );
                   })()}
@@ -1236,6 +1250,39 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Modal Popup: Confluencia Total */}
+      {confluenceModalStrategy && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-fadeIn"
+          onClick={() => setConfluenceModalStrategy(null)}
+        >
+          <div 
+            className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-950 border-2 border-cyan-500/50 rounded-2xl shadow-2xl shadow-cyan-500/20 p-4 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del Modal */}
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
+                <h3 className="text-base sm:text-lg font-black font-mono text-white uppercase tracking-wider">
+                  Confluencia Cuantitativa Total: {confluenceModalStrategy.symbol.replace(/USDT$/i, '')}/USDT
+                </h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setConfluenceModalStrategy(null)}
+                className="px-3 py-1 text-xs font-mono font-bold text-slate-400 hover:text-white bg-slate-900 hover:bg-rose-950/80 border border-slate-700 hover:border-rose-500/80 rounded-lg transition-colors cursor-pointer"
+              >
+                ✕ Cerrar
+              </button>
+            </div>
+
+            {/* Panel de Confluencia Completo */}
+            <StrategyConfluencePanel strategy={confluenceModalStrategy} />
+          </div>
+        </div>
+      )}
 
     </div>
   );
