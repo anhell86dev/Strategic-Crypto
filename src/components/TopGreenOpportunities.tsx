@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StrategyWithOrders } from '../types';
 import { indicatorsService } from '../services/indicatorsService';
 import { multiTimeframeService } from '../services/multiTimeframeService';
-import { HorizontalPriceScaleBar } from './HorizontalPriceScaleBar';
+import { MiniSparkline } from './MiniSparkline';
 import { 
   Trophy, 
   Flame, 
@@ -215,16 +215,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
         {/* Global Toolbar Buttons */}
         <div className="flex items-center gap-2.5 flex-wrap self-start md:self-auto">
-          {/* Button: Toggle Multitemporalidad for all */}
-          <button
-            onClick={handleToggleAllMultitemporal}
-            title="Expandir o colapsar la vista multitemporal de las 5 oportunidades"
-            className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center gap-2 cursor-pointer shadow-md bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/60 font-mono"
-          >
-            <Activity className="w-4 h-4 text-cyan-400" />
-            <span>{isAllMultiExpanded ? 'Ocultar Multitemporal' : 'Expandir Multitemporal (Todos)'}</span>
-          </button>
-
           {/* Button: Sync / Copy Row #1 Values to All */}
           <button
             onClick={handleApplyFirstRowToAll}
@@ -258,43 +248,43 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
           {/* Table Header */}
           <thead>
             <tr className="border-b border-emerald-500/30 text-xs font-black text-slate-200 uppercase tracking-wider bg-slate-950/90">
-              <th rowSpan={2} className="py-3 px-3 text-center w-12 border-r border-slate-800">Rank</th>
-              <th rowSpan={2} className="py-3 px-3 w-24 border-r border-slate-800">Semáforo</th>
-              <th rowSpan={2} className="py-3 px-3 border-r border-slate-800 min-w-[210px]">
+              <th rowSpan={2} className="py-1.5 px-2 text-center w-12 border-r border-slate-800">Rank</th>
+              <th rowSpan={2} className="py-1.5 px-2.5 border-r border-slate-800 min-w-[190px]">
                 Par / Dirección / Precio Live
               </th>
-              <th rowSpan={2} className="py-3 px-2 text-center w-28 border-r border-slate-800">
+              <th rowSpan={2} className="py-1.5 px-2 text-center w-24 border-r border-slate-800">
                 <div className="flex flex-col items-center gap-0.5">
                   <span>Inversión ($)</span>
                   <button 
                     onClick={handleApplyFirstRowToAll}
                     title="Aplicar #1 a todos"
-                    className="text-[10px] text-amber-300 hover:text-amber-200 underline cursor-pointer normal-case font-normal"
+                    className="text-[9px] text-amber-300 hover:text-amber-200 underline cursor-pointer normal-case font-normal"
                   >
                     (Copiar #1)
                   </button>
                 </div>
               </th>
-              <th rowSpan={2} className="py-3 px-2 text-center w-24 border-r border-slate-800">
+              <th rowSpan={2} className="py-1.5 px-2 text-center w-20 border-r border-slate-800">
                 <div className="flex flex-col items-center gap-0.5">
                   <span>Apal. (x)</span>
                   <button 
                     onClick={handleApplyFirstRowToAll}
                     title="Aplicar #1 a todos"
-                    className="text-[10px] text-amber-300 hover:text-amber-200 underline cursor-pointer normal-case font-normal"
+                    className="text-[9px] text-amber-300 hover:text-amber-200 underline cursor-pointer normal-case font-normal"
                   >
                     (Copiar #1)
                   </button>
                 </div>
               </th>
+              <th rowSpan={2} className="py-1.5 px-2 w-24 border-r border-slate-800 text-center">Semáforo</th>
 
               {/* Group 2: Entradas DCA */}
-              <th colSpan={3} className="py-2 px-3 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
+              <th colSpan={3} className="py-1.5 px-2 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
                 Entradas DCA (Precio & Activos)
               </th>
 
               {/* Group 3: Take Profit */}
-              <th colSpan={3} className="py-2 px-3 text-center text-emerald-300 bg-emerald-950/80 border-b border-emerald-700/60">
+              <th colSpan={3} className="py-1.5 px-2 text-center text-emerald-300 bg-emerald-950/80 border-b border-emerald-700/60">
                 Take Profit (TP1, TP2, TP3)
               </th>
             </tr>
@@ -302,19 +292,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
             {/* Sub-Headers Row 2 */}
             <tr className="border-b-2 border-emerald-500/40 text-[11px] font-black uppercase tracking-wider bg-slate-950">
               {/* DCA Sub-headers (inverted: E3, E2, E1) */}
-              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[95px]">
+              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[90px]">
                 <div className="flex flex-col items-center">
                   <span>E3</span>
                   <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / act</span>
                 </div>
               </th>
-              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[95px]">
+              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[90px]">
                 <div className="flex flex-col items-center">
                   <span>E2</span>
                   <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / act</span>
                 </div>
               </th>
-              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800 min-w-[95px]">
+              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800 min-w-[90px]">
                 <div className="flex flex-col items-center">
                   <span>E1</span>
                   <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / act</span>
@@ -322,19 +312,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               </th>
 
               {/* Take Profit Sub-headers (precio / %) */}
-              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[95px]">
+              <th className="py-1 px-1.5 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[90px]">
                 <div className="flex flex-col items-center">
                   <span>TP1</span>
                   <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / %</span>
                 </div>
               </th>
-              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[95px]">
+              <th className="py-1 px-1.5 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[90px]">
                 <div className="flex flex-col items-center">
                   <span>TP2</span>
                   <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / %</span>
                 </div>
               </th>
-              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 min-w-[95px]">
+              <th className="py-1 px-1.5 text-center text-emerald-300 bg-emerald-950/40 min-w-[90px]">
                 <div className="flex flex-col items-center">
                   <span>TP3</span>
                   <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / %</span>
@@ -560,7 +550,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     }`}
                   >
                     {/* Rank Column */}
-                    <td rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-800 align-top">
+                    <td rowSpan={2} className="py-1.5 px-2 text-center border-r border-slate-800 align-top">
                       <div className="flex items-center justify-center">
                         <span 
                           title={rankInfo.title}
@@ -572,31 +562,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       </div>
                     </td>
 
-                    {/* Semáforo Verde & Badges FAPI */}
-                    <td rowSpan={2} className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800 align-top">
-                      <div className="flex flex-col gap-1.5">
-                        <div 
-                          className="inline-flex items-center gap-2 px-2.5 py-1 rounded-xl bg-emerald-950 border border-emerald-400 text-emerald-300 shadow-sm w-fit"
-                          title={strat.trafficLight?.reason || 'Semáforo Verde: Sin SL, sin TP previo, en zona'}
-                        >
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
-                          </span>
-                          <span className="text-xs font-black uppercase tracking-wider text-emerald-300">
-                            {strat.trafficLight?.label || 'VERDE'}
-                          </span>
-                        </div>
-
-                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-xs font-extrabold uppercase w-fit ${futures.futuresStatusColor}`}>
-                          <span>🚦 {futures.futuresStatus}</span>
-                        </div>
-                      </div>
-                    </td>
-
                     {/* Par / Dirección / Precio Live / Estrategia / R:B Integrado */}
-                    <td rowSpan={2} className="py-2.5 px-3 border-r border-slate-800 align-top font-mono">
-                      <div className="flex flex-col gap-1.5">
+                    <td rowSpan={2} className="py-1.5 px-2.5 border-r border-slate-800 align-top font-mono">
+                      <div className="flex flex-col gap-1">
                         {/* Línea 1: PAR Dirección */}
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-black text-white text-base group-hover:text-emerald-300 transition-colors">
@@ -612,12 +580,12 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           </span>
                         </div>
 
-                        {/* Línea 2: Precio Live %cambio $cambio */}
-                        <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                          <span className="font-black text-white font-mono text-sm">
+                        {/* Línea 2: Precio Live %cambio $cambio (PRECIO MÁS GRANDE) */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-black text-white font-mono text-base sm:text-lg leading-none tracking-tight">
                             {formatPrice(currentPrice)}
                           </span>
-                          <span className={`font-black text-xs font-mono px-1 py-0.2 rounded border ${
+                          <span className={`font-black text-xs font-mono px-1 py-0.5 rounded border ${
                             isAdvancing 
                               ? 'text-emerald-300 bg-emerald-950/80 border-emerald-600/60' 
                               : 'text-rose-300 bg-rose-950/80 border-rose-600/60'
@@ -650,7 +618,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* Inversión ($) */}
-                    <td rowSpan={2} className="py-2.5 px-2 text-center whitespace-nowrap border-r border-slate-800 align-top">
+                    <td rowSpan={2} className="py-1.5 px-2 text-center whitespace-nowrap border-r border-slate-800 align-top">
                       <div className="flex items-center justify-center">
                         <input
                           type="number"
@@ -663,13 +631,13 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             const val = Math.max(1, parseFloat(e.target.value) || 0);
                             setInvestments(prev => ({ ...prev, [String(strat.id)]: val }));
                           }}
-                          className="w-20 px-2 py-1.5 bg-slate-900 border-2 border-emerald-500/70 focus:border-emerald-400 rounded-xl text-center font-mono font-black text-emerald-300 text-sm focus:ring-2 focus:ring-emerald-400 focus:outline-none shadow-lg"
+                          className="w-20 px-2 py-1 bg-slate-900 border-2 border-emerald-500/70 focus:border-emerald-400 rounded-xl text-center font-mono font-black text-emerald-300 text-sm focus:ring-2 focus:ring-emerald-400 focus:outline-none shadow-lg"
                         />
                       </div>
                     </td>
 
                     {/* Apalancamiento (x) */}
-                    <td rowSpan={2} className="py-2.5 px-2 text-center whitespace-nowrap border-r border-slate-800 align-top">
+                    <td rowSpan={2} className="py-1.5 px-2 text-center whitespace-nowrap border-r border-slate-800 align-top">
                       <div className="flex items-center justify-center">
                         <input
                           type="number"
@@ -682,8 +650,30 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             const val = Math.max(1, Math.min(125, parseInt(e.target.value) || 1));
                             setLeverages(prev => ({ ...prev, [String(strat.id)]: val }));
                           }}
-                          className="w-14 px-1.5 py-1.5 bg-slate-900 border-2 border-amber-500/70 focus:border-amber-400 rounded-xl text-center font-mono font-black text-amber-300 text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none shadow-lg"
+                          className="w-14 px-1.5 py-1 bg-slate-900 border-2 border-amber-500/70 focus:border-amber-400 rounded-xl text-center font-mono font-black text-amber-300 text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none shadow-lg"
                         />
+                      </div>
+                    </td>
+
+                    {/* Semáforo Verde & Badges FAPI (DESPUÉS DE APALANCAMIENTO) */}
+                    <td rowSpan={2} className="py-1.5 px-2 whitespace-nowrap border-r border-slate-800 align-top">
+                      <div className="flex flex-col gap-1 items-center">
+                        <div 
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-950 border border-emerald-400 text-emerald-300 shadow-sm w-fit"
+                          title={strat.trafficLight?.reason || 'Semáforo Verde: Sin SL, sin TP previo, en zona'}
+                        >
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                          </span>
+                          <span className="text-[11px] font-black uppercase tracking-wider text-emerald-300">
+                            {strat.trafficLight?.label || 'VERDE'}
+                          </span>
+                        </div>
+
+                        <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold uppercase w-fit ${futures.futuresStatusColor}`}>
+                          <span>🚦 {futures.futuresStatus}</span>
+                        </div>
                       </div>
                     </td>
 
@@ -1060,9 +1050,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           }`}
                         >
                           {/* Cols 1 to 5: Reglas del Trading (En el espacio bajo Rank hasta Apalancamiento) */}
-                          <td colSpan={5} className="py-2.5 px-3 border-r border-slate-800 bg-slate-950/95 font-sans border-t-0 align-middle">
-                            <div className="flex items-center gap-2.5 flex-wrap">
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/90 border border-cyan-500/60 text-cyan-300 font-mono font-black text-[10px] uppercase tracking-wider shadow-sm shrink-0">
+                          <td colSpan={5} className="py-1.5 px-2.5 border-r border-slate-800 bg-slate-950/95 font-sans border-t-0 align-middle">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-cyan-950/90 border border-cyan-500/60 text-cyan-300 font-mono font-black text-[10px] uppercase tracking-wider shadow-sm shrink-0">
                                 <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
                                 <span>Reglas del Trading</span>
                               </span>
@@ -1070,7 +1060,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                                 {strat.tacticalRules || 'Mover SL a Breakeven al alcanzar TP1. Cerrar 50% en TP1 para asegurar ganancia.'}
                               </span>
                               {strat.tradeDiscipline && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/50 text-purple-300 text-[10px] font-mono shrink-0 shadow-xs">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/50 text-purple-300 text-[10px] font-mono shrink-0 shadow-xs">
                                   <span>⚡</span>
                                   <span>{strat.tradeDiscipline}</span>
                                 </span>
@@ -1078,78 +1068,28 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             </div>
                           </td>
 
-                          {/* Cols 8 to 13: ONE Single Continuous Price Line ANCHORED to the bottom of the cells */}
-                          <td colSpan={6} className="pt-2 pb-8 px-3 border-r border-slate-800 bg-slate-950/95 font-mono border-t-0">
-                            {/* Franja Superior Multitemporal Integrada (PUB ➔ 5m ➔ 15m ➔ 1h ➔ 4h ➔ Diario) */}
-                            <div className="flex items-center justify-between gap-1.5 mb-2 flex-wrap">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                                  <span>Multitemporal:</span>
-                                </span>
-                                {/* Mini cápsulas de temporalidad en la secuencia exacta */}
-                                <div className="flex items-center gap-1 text-[9px] font-mono font-bold">
-                                  <span 
-                                    title={`PUB (Publicación): ${liveVsEntryPct >= 0 ? '+' : ''}${liveVsEntryPct.toFixed(1)}%`}
-                                    className={`px-1.5 py-0.5 rounded border ${isAdvancing ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300'}`}
-                                  >
-                                    PUB {liveVsEntryPct >= 0 ? '+' : ''}{liveVsEntryPct.toFixed(1)}%
-                                  </span>
-                                  <span className="text-slate-600 font-normal">➔</span>
-                                  <span 
-                                    title="Vela 5M"
-                                    className={`px-1.5 py-0.5 rounded border ${c5m ? (c5m.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-slate-900 border-slate-700 text-slate-400'}`}
-                                  >
-                                    5m {c5m ? (c5m.changePercent >= 0 ? '+' : '') + c5m.changePercent.toFixed(1) + '%' : ''}
-                                  </span>
-                                  <span className="text-slate-600 font-normal">➔</span>
-                                  <span 
-                                    title="Vela 15M"
-                                    className={`px-1.5 py-0.5 rounded border ${c15m ? (c15m.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-slate-900 border-slate-700 text-slate-400'}`}
-                                  >
-                                    15m {c15m ? (c15m.changePercent >= 0 ? '+' : '') + c15m.changePercent.toFixed(1) + '%' : ''}
-                                  </span>
-                                  <span className="text-slate-600 font-normal">➔</span>
-                                  <span 
-                                    title="Vela 1H"
-                                    className={`px-1.5 py-0.5 rounded border ${c1h ? (c1h.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-slate-900 border-slate-700 text-slate-400'}`}
-                                >
-                                    1h {c1h ? (c1h.changePercent >= 0 ? '+' : '') + c1h.changePercent.toFixed(1) + '%' : ''}
-                                  </span>
-                                  <span className="text-slate-600 font-normal">➔</span>
-                                  <span 
-                                    title="Vela 4H"
-                                    className={`px-1.5 py-0.5 rounded border ${c4h ? (c4h.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-slate-900 border-slate-700 text-slate-400'}`}
-                                  >
-                                    4h {c4h ? (c4h.changePercent >= 0 ? '+' : '') + c4h.changePercent.toFixed(1) + '%' : ''}
-                                  </span>
-                                  <span className="text-slate-600 font-normal">➔</span>
-                                  <span 
-                                    title="Vela DIARIO (Escala Rectora)"
-                                    className={`px-1.5 py-0.5 rounded border ${c1d ? (c1d.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-amber-950/80 border-amber-500/50 text-amber-300'}`}
-                                  >
-                                    1D {c1d ? (c1d.changePercent >= 0 ? '+' : '') + c1d.changePercent.toFixed(1) + '%' : ''}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Botón para expandir/colapsar la escala multitemporal completa */}
+                          {/* Cols 6 to 11: ONE Single Continuous Price Line ANCHORED to the bottom of the cells */}
+                          <td colSpan={6} className="py-1.5 px-2.5 border-r border-slate-800 bg-slate-950/95 font-mono border-t-0 align-middle">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="text-[10px] font-bold text-slate-400 font-mono uppercase tracking-wider">
+                                Rango Táctico (SL ➔ DCA ➔ TPs)
+                              </span>
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   toggleMultitemporal(strat.id);
                                 }}
-                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-mono font-extrabold uppercase transition-all cursor-pointer shadow-xs border ${
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer border ${
                                   isMultiExpanded
-                                    ? 'bg-cyan-400 text-slate-950 border-cyan-300 shadow-cyan-400/40'
-                                    : 'bg-slate-900 text-cyan-300 border-cyan-500/50 hover:bg-cyan-950/80 hover:border-cyan-400'
+                                    ? 'bg-cyan-400 text-slate-950 border-cyan-300 font-black shadow-xs'
+                                    : 'bg-slate-900 text-cyan-300 border-slate-700 hover:border-cyan-500'
                                 }`}
-                                title="Ver gráfica multitemporal con velas PUB, 5m, 15m, 1h, 4h y Diario con uniones fractales"
+                                title="Ver mini gráfico"
                               >
-                                <Activity className="w-3.5 h-3.5" />
-                                <span>{isMultiExpanded ? 'Ocultar Gráfica' : 'Ver Multitemporal'}</span>
-                                {isMultiExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                <Activity className="w-3 h-3" />
+                                <span>{isMultiExpanded ? 'Ocultar Gráfica' : 'Mini Gráfico'}</span>
+                                {isMultiExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                               </button>
                             </div>
 
@@ -1239,43 +1179,34 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                                 </div>
                               )}
 
-                              {/* Etiqueta flotante de precio LIVE y dirección posicionada sobre el límite de llenado de la barra (DEBAJO de la barra para no tapar celdas) */}
+                              {/* Cursor compacto de precio LIVE sobre la barra */}
                               <div 
                                 className="absolute top-0 bottom-0 -translate-x-1/2 transition-all duration-300 z-30 flex items-center justify-center pointer-events-none whitespace-nowrap h-8"
-                                style={{ left: `${Math.max(10, Math.min(90, posPct))}%` }}
+                                style={{ left: `${Math.max(8, Math.min(92, posPct))}%` }}
                               >
-                                {/* Etiqueta flotante de precio LIVE y dirección posicionada de forma absoluta DEBAJO de la barra */}
-                                <div className={`absolute top-full mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-xl border backdrop-blur-md transition-all ${
+                                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 shadow-md border backdrop-blur-md ${
                                   isAdvancing
-                                    ? 'bg-slate-950/95 text-emerald-300 border-emerald-400 shadow-emerald-500/40 ring-1 ring-emerald-500/40'
-                                    : 'bg-slate-950/95 text-rose-300 border-rose-400 shadow-rose-500/40 ring-1 ring-rose-500/40'
+                                    ? 'bg-slate-950 text-emerald-300 border-emerald-400 shadow-emerald-500/40 ring-1 ring-emerald-500/40'
+                                    : 'bg-slate-950 text-rose-300 border-rose-400 shadow-rose-500/40 ring-1 ring-rose-500/40'
                                 }`}>
                                   <span className={`w-1.5 h-1.5 rounded-full ${isAdvancing ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`} />
                                   <span>LIVE: {formatPrice(currentPrice)}</span>
-                                  <span className={`font-black text-[10px] tracking-wider inline-flex items-center gap-0.5 ${
-                                    isAdvancing ? 'text-emerald-300 animate-directional-right' : 'text-rose-300 animate-directional-left'
-                                  }`}>
-                                    {isAdvancing ? '►►►' : '◄◄◄'}
-                                  </span>
                                 </div>
                               </div>
                             </div>
                           </td>
                         </tr>
 
-                        {/* Fila Expandible: Gráfica Multitemporal Completa para la Oportunidad */}
+                        {/* Fila Expandible Acordeón: Mini Gráfico en Vivo */}
                         {isMultiExpanded && (
                           <tr className="bg-slate-950 border-b-2 border-slate-800 transition-all">
-                            <td colSpan={11} className="p-3 sm:p-4 bg-slate-950/95">
-                              <div className="rounded-xl border border-cyan-500/40 bg-slate-950 p-2 sm:p-3 shadow-2xl">
-                                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 flex-wrap gap-2">
+                            <td colSpan={11} className="py-2.5 px-3 bg-slate-950/95">
+                              <div className="rounded-xl border border-cyan-500/40 bg-slate-900/90 p-2.5 sm:p-3 shadow-xl">
+                                <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-800">
                                   <div className="flex items-center gap-2">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+                                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                                     <span className="text-xs font-black uppercase text-cyan-300 font-mono tracking-wider">
-                                      Análisis Multitemporal de Precios: {symbolClean}/USDT
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 font-mono">
-                                      (Secuencia: PUB ➔ 5m ➔ 15m ➔ 1h ➔ 4h ➔ Diario)
+                                      Mini Gráfico en Vivo: {symbolClean}/USDT
                                     </span>
                                   </div>
                                   <button
@@ -1284,12 +1215,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                                       e.stopPropagation();
                                       toggleMultitemporal(strat.id);
                                     }}
-                                    className="text-[10px] font-mono text-slate-400 hover:text-white px-2.5 py-0.5 rounded bg-slate-900 border border-slate-700 cursor-pointer"
+                                    className="text-[10px] font-mono text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700 cursor-pointer"
                                   >
                                     ✕ Cerrar
                                   </button>
                                 </div>
-                                <HorizontalPriceScaleBar strategy={stratWithUpdatedTps as any} />
+                                <div className="h-32 w-full">
+                                  <MiniSparkline symbol={symbolClean} currentPrice={currentPrice} />
+                                </div>
                               </div>
                             </td>
                           </tr>
