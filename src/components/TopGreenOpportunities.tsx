@@ -648,6 +648,74 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 };
               });
 
+              // Calcular Estado Actual según el Flujograma Táctico (Camino C1, C2 o C3)
+              const flowchartStatus = (() => {
+                if (stepMap.sl || (slPrice > 0 && (isLong ? currentPrice <= slPrice : currentPrice >= slPrice))) {
+                  return {
+                    code: 'C3',
+                    shortLabel: '🔴 C3: SL Tocado',
+                    label: 'Camino 3: Stop Loss Ejecutado (Cierre de Protección)',
+                    badgeClass: 'bg-rose-950/90 text-rose-300 border-rose-600/70 hover:border-rose-400',
+                  };
+                }
+                if (stepMap.tp3 || (pTp3 && (isLong ? currentPrice >= pTp3 : currentPrice <= pTp3))) {
+                  return {
+                    code: 'C1',
+                    shortLabel: '🏆 C1: TP3 Éxito',
+                    label: 'Camino 1: TP3 Alcanzado (Ganancia Máxima 100%)',
+                    badgeClass: 'bg-emerald-950/90 text-emerald-200 border-emerald-400 hover:border-emerald-300',
+                  };
+                }
+                if (stepMap.tp2 || (pTp2 && (isLong ? currentPrice >= pTp2 : currentPrice <= pTp2))) {
+                  return {
+                    code: 'C1',
+                    shortLabel: '🚀 C1: En TP2',
+                    label: 'Camino 1: TP2 Alcanzado (Rumbo a TP3)',
+                    badgeClass: 'bg-emerald-950/90 text-emerald-300 border-emerald-500/80 hover:border-emerald-400',
+                  };
+                }
+                if (stepMap.tp1 || (pTp1 && (isLong ? currentPrice >= pTp1 : currentPrice <= pTp1))) {
+                  return {
+                    code: 'C1',
+                    shortLabel: '🟢 C1: TP1 (SL➔BE)',
+                    label: 'Camino 1: TP1 Asegurado (Stop Loss en Breakeven)',
+                    badgeClass: 'bg-emerald-950/90 text-emerald-300 border-emerald-500/80 hover:border-emerald-400',
+                  };
+                }
+                if (stepMap.e3 || (hasE3 && pE3 && (isLong ? currentPrice <= pE3 : currentPrice >= pE3))) {
+                  const isRebounding = isLong ? currentPrice > pE3 : currentPrice < pE3;
+                  return {
+                    code: 'C2',
+                    shortLabel: isRebounding ? '✨ C2: Rebote E3' : '🟡 C2: En E3 DCA',
+                    label: isRebounding ? 'Camino 2: Rebote desde Soporte E3 ➔ TP1' : 'Camino 2: En Soporte Mayor E3 (100% Capital)',
+                    badgeClass: 'bg-amber-950/90 text-amber-300 border-amber-500/80 hover:border-amber-400',
+                  };
+                }
+                if (stepMap.e2 || (hasE2 && pE2 && (isLong ? currentPrice <= pE2 : currentPrice >= pE2))) {
+                  const isRebounding = isLong ? currentPrice > pE2 : currentPrice < pE2;
+                  return {
+                    code: 'C2',
+                    shortLabel: isRebounding ? '✨ C2: Rebote E2' : '🟡 C2: En E2 DCA',
+                    label: isRebounding ? 'Camino 2: Rebote desde E2 ➔ TP1' : 'Camino 2: En Refuerzo DCA E2 (Promedio Optimizado)',
+                    badgeClass: 'bg-sky-950/90 text-sky-300 border-sky-500/80 hover:border-sky-400',
+                  };
+                }
+                if (pE1 > 0 && (isLong ? currentPrice > pE1 : currentPrice < pE1)) {
+                  return {
+                    code: 'C1',
+                    shortLabel: '🟢 C1: Rumbo TP1',
+                    label: 'Camino 1: Impulso Directo Rumbo a TP1',
+                    badgeClass: 'bg-cyan-950/90 text-cyan-300 border-cyan-500/80 hover:border-cyan-400',
+                  };
+                }
+                return {
+                  code: 'C1',
+                  shortLabel: '⏱️ C1: En Entrada',
+                  label: 'Camino 1: En Zona de Entrada Inicial E1',
+                  badgeClass: 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500',
+                };
+              })();
+
               return (
                 <React.Fragment key={strat.id}>
                   <tr
@@ -826,6 +894,24 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                         >
                           <span className="text-slate-400 font-bold group-hover/conf:text-cyan-200">Conf:</span>
                           <span className="text-cyan-300 font-black group-hover/conf:text-cyan-100">{overallScore}% 🔍</span>
+                        </button>
+
+                        {/* Estado Actual según el Flujograma Táctico (Abajo de Conf) */}
+                        <button 
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFlowchartModalStrategy(strat);
+                            setIsFlowchartModalOpen(true);
+                          }}
+                          className={`flex items-center justify-between gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-bold shadow-xs transition-all cursor-pointer w-full max-w-[110px] ${flowchartStatus.badgeClass}`}
+                          title={`Estado táctico según el Flujograma: ${flowchartStatus.label}. Clic para abrir el árbol de decisión.`}
+                        >
+                          <div className="flex items-center gap-1 truncate">
+                            <GitBranch className="w-2.5 h-2.5 shrink-0 text-current" />
+                            <span className="truncate">{flowchartStatus.shortLabel}</span>
+                          </div>
+                          <span className="text-[8px] opacity-70">➔</span>
                         </button>
                       </div>
                     </td>
