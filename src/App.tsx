@@ -69,25 +69,35 @@ export default function App() {
   // Trade History Log State
   const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>(() => TradeLogService.getLogs());
 
-  // Notificación de depuración de caché
+  // Notificación de depuración de caché y sincronización
   const [purgeNotice, setPurgeNotice] = useState<{ message: string; count: number } | null>(null);
 
-  // Initial / Manual Sync from Google Sheets / Storage with Cache Purging option
+  // Sync Process: 1. Depurar Caché -> 2. Cargar y Sincronizar Datos desde Google Docs
   const loadStrategiesData = useCallback(async (cfg: SheetsConfig, forcePurgeCache: boolean = false) => {
     setIsSyncing(true);
     setSheetsStatus('connecting');
+
+    // PASO 1: Depurar la caché local para eliminar datos viejos/almacenados
+    if (forcePurgeCache) {
+      SheetsService.clearCache();
+      console.log('🧹 [Paso 1/2] Depuración de caché local de estrategias completada.');
+    }
+
     try {
+      // PASO 2: Cargar y sincronizar los datos actualizados desde Google Docs (sin caché estancada)
+      console.log('🟢 [Paso 2/2] Carga y sincronización de datos en vivo desde Google Docs...');
       const res = await SheetsService.fetchFromGoogleSheets(cfg, forcePurgeCache);
       setStrategies(res.strategies);
       setOrders(res.orders);
       setLastSyncTime(res.timestamp);
       setSheetsStatus('connected');
+
       if (forcePurgeCache) {
         setPurgeNotice({
-          message: 'Caché depurada y eliminada con éxito.',
+          message: 'Paso 1: Caché depurada con éxito 🧹 ➔ Paso 2: Datos cargados y sincronizados desde Google Docs 🟢',
           count: res.strategies.length
         });
-        setTimeout(() => setPurgeNotice(null), 5000);
+        setTimeout(() => setPurgeNotice(null), 6000);
       }
     } catch (err) {
       console.error('Error fetching sheets data:', err);

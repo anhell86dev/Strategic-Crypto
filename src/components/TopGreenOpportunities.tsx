@@ -251,15 +251,15 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2 font-mono">
-                TOP 5 MEJORES OPORTUNIDADES DEL CATÁLOGO 🏆
+                TOP 5 OPORTUNIDADES VIGENTES 🏆
               </h3>
               <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950 border border-emerald-400 text-xs font-black text-emerald-300 uppercase tracking-wider font-mono shadow-sm">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                MEJORES 5 DE TODO EL CATÁLOGO (SIN FILTROS)
+                FILTRADO DE RIESGO: EXCLUYE SL, TP1+ Y ESCAPADAS
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              Top 5 mejores oportunidades evaluadas sobre la totalidad del catálogo, ordenadas por <strong>Confluencia Técnica</strong> (40%), <strong>Ratio R:B</strong> (35%) y <strong>Activación en Zona DCA</strong> (25%).
+              Top 5 oportunidades en zona. Se excluyen automáticamente operaciones con Stop Loss tocado, escapadas a TP antes de entrada o trades que ya alcanzaron TP1.
             </p>
           </div>
         </div>

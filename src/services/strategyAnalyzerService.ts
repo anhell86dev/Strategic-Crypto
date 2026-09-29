@@ -514,12 +514,96 @@ export class StrategyAnalyzerService {
   }
 
   /**
-   * Returns the Top N best strategies of the ENTIRE catalog (without traffic light filtering),
-   * ordered by composite rank score: Confluencia (40%), Ratio R:B (35%), Proximidad / Zona DCA (25%).
+   * Validates whether a strategy is a valid, active pending/entry opportunity.
+   * EXCLUDES:
+   * 1. SL Tocado (Stop Loss Hit / Invalidated)
+   * 2. TP antes de Entrada (Escaped to TP before filling entries)
+   * 3. Ya tocó Entradas y TP1+ (Trade already completed / passed its primary TP)
+   * 4. Inactiva / Retirada / Borrada / Cerrada / Finalizada
+   */
+  public static isStrategyValidOpportunity(strategy: StrategyWithOrders): boolean {
+    const {
+      status,
+      statusSheetEstrategia,
+      trafficLight,
+      type,
+      entryPrice,
+      stopLoss,
+      orders = [],
+      currentPrice,
+      high24h,
+      low24h
+    } = strategy;
+
+    // A. Check explicit status string from Sheet or Strategy object
+    const rawStatus = (statusSheetEstrategia || status || '').toUpperCase().trim();
+    if (
+      rawStatus.includes('RETIRADA') ||
+      rawStatus.includes('INACTIVA') ||
+      rawStatus.includes('BORRADA') ||
+      rawStatus.includes('CERRADA') ||
+      rawStatus.includes('INVALIDAD') ||
+      rawStatus.includes('SL TOCADO') ||
+      rawStatus.includes('FINALIZADA')
+    ) {
+      return false;
+    }
+
+    // B. Check Traffic Light Status
+    if (trafficLight) {
+      if (trafficLight.status === 'ROJO' || trafficLight.slHit) {
+        return false; // SL Tocado
+      }
+      if (trafficLight.status === 'NARANJA' || trafficLight.tpHitBeforeEntry) {
+        return false; // Escapó a TP antes de entradas
+      }
+    }
+
+    // C. Check price levels for SL, TP-before-entry, and Entry-then-TP1
+    const isLong = type === 'LONG';
+    const live = currentPrice || entryPrice;
+    const e1 = entryPrice;
+    const sl = stopLoss;
+    const tp1 = orders[0]?.targetPrice || (isLong ? e1 * 1.03 : e1 * 0.97);
+
+    // 1. Check SL Hit
+    const slHit = isLong 
+      ? (live <= sl || (low24h !== undefined && low24h <= sl && live <= e1))
+      : (live >= sl || (high24h !== undefined && high24h >= sl && live >= e1));
+    if (slHit) return false;
+
+    // 2. Check if price touched E1 (Entry)
+    const hitE1 = isLong
+      ? (live <= e1 || (low24h !== undefined && low24h <= e1))
+      : (live >= e1 || (high24h !== undefined && high24h >= e1));
+
+    // 3. Check if price touched TP1
+    const hitTp1 = isLong
+      ? (live >= tp1 || (high24h !== undefined && high24h >= tp1))
+      : (live <= tp1 || (low24h !== undefined && low24h <= tp1));
+
+    // If hit TP1 BEFORE hitting E1 -> Escaped to TP
+    if (hitTp1 && !hitE1) {
+      return false;
+    }
+
+    // If hit E1 AND hit TP1 -> Trade already completed TP1 ("se pasó el trading")
+    if (hitE1 && hitTp1) {
+      return false;
+    }
+
+    // Otherwise, it is a valid active/pending opportunity!
+    return true;
+  }
+
+  /**
+   * Returns the Top N best VALID opportunities ordered by composite rank score:
+   * Confluencia (40%), Ratio R:B (35%), Proximidad / Zona DCA (25%).
+   * Excludes SL hit, TP before entry, and trades that already hit TP1 after entry.
    */
   public static getTopGreenStrategies(strategies: StrategyWithOrders[], limit = 5): StrategyWithOrders[] {
     return [...strategies]
-      .filter(s => s.status !== 'RETIRADA' && s.status !== 'INACTIVA' && s.status !== 'BORRADA')
+      .filter(s => this.isStrategyValidOpportunity(s))
       .sort((a, b) => {
         const scoreA = a.trafficLight?.rankScore || 0;
         const scoreB = b.trafficLight?.rankScore || 0;
