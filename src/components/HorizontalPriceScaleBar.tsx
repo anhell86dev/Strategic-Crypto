@@ -13,6 +13,9 @@ import {
 
 interface HorizontalPriceScaleBarProps {
   strategy: StrategyWithOrders;
+  compact?: boolean;
+  defaultExpanded?: boolean;
+  hideHeader?: boolean;
 }
 
 /**
@@ -79,8 +82,12 @@ export const getStrategyElapsedHoursInfo = (rawDate?: string, stratName?: string
 };
 
 export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = ({
-  strategy
+  strategy,
+  compact = false,
+  defaultExpanded = false,
+  hideHeader = false
 }) => {
+  const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
   const {
     symbol,
     coinName,
@@ -165,12 +172,12 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
     };
   }, [pubInfo, entryPrice, livePrice]);
 
-  // Daily Candle parameters
+  // Daily Candle parameters (Mínimo y Máximo diario estricto como marco rector)
   const dailyCandle = tfData?.candles?.['1d'];
-  const dOpen = dailyCandle?.open || (livePrice * 1.044);
+  const dHigh = dailyCandle?.high || strategy.high24h || Math.max(entryPrice * 1.035, livePrice * 1.025);
+  const dLow = dailyCandle?.low || strategy.low24h || Math.min(entryPrice * 0.965, livePrice * 0.975);
+  const dOpen = dailyCandle?.open || (dLow + (dHigh - dLow) * 0.48);
   const dClose = dailyCandle?.close || livePrice;
-  const dHigh = dailyCandle?.high || Math.max(dOpen, dClose, livePrice * 1.045);
-  const dLow = dailyCandle?.low || Math.min(dOpen, dClose, livePrice * 0.955);
   const dChange = dOpen > 0 ? ((dClose - dOpen) / dOpen) * 100 : 0;
 
   // 1. ESCALA INDEPENDIENTE PARA LA BARRA SUPERIOR DE TRADING (SL, E3, E2, E1, Live, TP1, TP2, TP3)
@@ -259,15 +266,13 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   }, [tfData, entryPrice, pubCandle, dOpen, dClose, dHigh, dLow, dChange]);
 
   // UNIONES ESPECÍFICAS SEGÚN ORDEN FRACTAL TEMPORAL:
-  // 4H (C) conecta con 1H (O)
-  // 1H (C) conecta con 15M (O)
-  // 15M (C) conecta con 5M (O)
-  // 5M (C) conecta con PUB (O)
+  // 1. 4H (Cierre) ➔ 1H (Apertura)
+  // 2. 1H (Cierre) ➔ 15M (Apertura)
+  // 3. 15M (Cierre) ➔ 5M (Apertura)
+  // 4. 5M (Cierre) ➔ PUB (Apertura)
   // El DIARIO NO SE DEBE CONECTAR.
   const connections = useMemo(() => {
     if (!showConnectors || timeframesList.length < 2) return [];
-
-    const totalRows = timeframesList.length;
 
     const candlePub = timeframesList.find(tf => tf.timeframe === 'pub' || (tf as any).isPublicationTimeframe);
     const candle5m = timeframesList.find(tf => tf.timeframe === '5m');
@@ -294,6 +299,12 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
       lowerLabel: string;
     }[] = [];
 
+    const totalRows = timeframesList.length;
+    // Cálculo preciso de centros en base a altura de fila y espaciado
+    const rowHeight = compact ? 28 : 32;
+    const rowGap = 8;
+    const totalHeight = totalRows * rowHeight + (totalRows - 1) * rowGap;
+
     for (const pair of pairs) {
       if (!pair.from || !pair.to) continue;
 
@@ -304,10 +315,10 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
       // Cierre del origen (pair.from.close) ➔ Apertura del destino (pair.to.open)
       const x1 = getDailyPercentPos(pair.from.close);
-      const y1 = ((fromIndex + 0.5) / totalRows) * 100;
+      const y1 = ((fromIndex * (rowHeight + rowGap) + rowHeight / 2) / totalHeight) * 100;
 
       const x2 = getDailyPercentPos(pair.to.open);
-      const y2 = ((toIndex + 0.5) / totalRows) * 100;
+      const y2 = ((toIndex * (rowHeight + rowGap) + rowHeight / 2) / totalHeight) * 100;
 
       conns.push({
         fromIndex,
@@ -323,7 +334,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
     }
 
     return conns;
-  }, [timeframesList, showConnectors, minDailyScale, dailyScaleSpan]);
+  }, [timeframesList, showConnectors, minDailyScale, dailyScaleSpan, compact]);
 
   // ATR metrics
   const atrVal = tfData?.atr14 || (livePrice * 0.02);
@@ -332,6 +343,329 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
   // Status checks
   const isSlHit = isLong ? livePrice <= stopLoss : livePrice >= stopLoss;
   const isDangerZone = isLong ? livePrice < entryPrice && livePrice > stopLoss : livePrice > entryPrice && livePrice < stopLoss;
+
+  if (compact) {
+    return (
+      <div className="w-full font-mono select-none" onClick={(e) => e.stopPropagation()}>
+        {/* Header Compacto con Botón de Expansión de Temporalidades */}
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            Rango Táctico (SL ➔ DCA ➔ TPs)
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer border ${
+              isExpanded
+                ? 'bg-cyan-400 text-slate-950 border-cyan-300 font-black shadow-sm'
+                : 'bg-slate-900 text-cyan-300 border-slate-700 hover:border-cyan-400'
+            }`}
+          >
+            <span>⏱️ Temporalidades (5M, 15M, 1H, 4H, 1D)</span>
+            <span>{isExpanded ? '▲' : '▼'}</span>
+          </button>
+        </div>
+
+        {/* 1. Línea Principal de Precio: Pista Master de Trading con marcadores */}
+        <div className="relative pt-6 pb-7 w-full">
+          {/* Pista Gradiente de Fondo */}
+          <div className="h-3 rounded-full bg-gradient-to-r from-rose-950 via-slate-800 to-emerald-950 border border-slate-700/80 relative shadow-inner overflow-hidden">
+            {/* Zona Activa entre Entrada y Live */}
+            <div 
+              className={`absolute top-0 bottom-0 rounded-full overflow-hidden ${
+                pnlPercent >= 0 
+                  ? 'bg-gradient-to-r from-cyan-500/50 via-emerald-500/60 to-emerald-400/80 shadow-md shadow-emerald-500/20' 
+                  : 'bg-gradient-to-r from-rose-500/70 via-rose-500/60 to-amber-500/50 shadow-md shadow-rose-500/20'
+              }`}
+              style={{ 
+                left: `${Math.min(tradeLivePos, tradeEntryPos)}%`, 
+                width: `${Math.abs(tradeLivePos - tradeEntryPos)}%` 
+              }}
+            >
+              <div 
+                className={`absolute inset-0 pointer-events-none opacity-40 ${
+                  tradeLivePos >= tradeEntryPos ? 'animate-flow-stripes-right' : 'animate-flow-stripes-left'
+                }`} 
+              />
+              <div 
+                className={`absolute inset-0 pointer-events-none bg-gradient-to-r from-transparent via-white/40 to-transparent ${
+                  tradeLivePos >= tradeEntryPos ? 'animate-laser-right' : 'animate-laser-left'
+                }`} 
+              />
+            </div>
+          </div>
+
+          {/* Marcador SL */}
+          <div 
+            className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+            style={{ left: `${tradeSlPos}%`, transform: 'translate(-50%, -50%)' }}
+          >
+            <div className="w-4 h-4 rounded-full bg-rose-500 border-2 border-slate-950 shadow-md flex items-center justify-center text-[7px] font-black text-white">
+              SL
+            </div>
+            <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
+              <span className="text-rose-300 font-bold block bg-slate-950/90 px-1 rounded border border-rose-900/60">
+                SL: {formatPrice(stopLoss)}
+                <span className="text-[9px] font-extrabold text-rose-400 block -mt-0.5">
+                  {getDeltaPct(stopLoss)}
+                </span>
+              </span>
+            </div>
+          </div>
+
+          {/* Marcador E3 */}
+          {hasE3 && e3Price && tradeE3Pos !== null && (
+            <div 
+              className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+              style={{ left: `${tradeE3Pos}%`, transform: 'translate(-50%, -50%)' }}
+            >
+              <div className="w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-slate-950 shadow-md flex items-center justify-center text-[7px] font-black text-slate-950">
+                E3
+              </div>
+              <div className="absolute bottom-4 text-center whitespace-nowrap font-mono text-[10px]">
+                <span className="text-amber-300 font-bold block bg-slate-950/90 px-1 rounded border border-amber-800/60">
+                  E3: {formatPrice(e3Price)}
+                  <span className="text-[9px] font-extrabold text-amber-400 block -mt-0.5">
+                    {getDeltaPct(e3Price)}
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Marcador E2 */}
+          {hasE2 && e2Price && tradeE2Pos !== null && (
+            <div 
+              className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+              style={{ left: `${tradeE2Pos}%`, transform: 'translate(-50%, -50%)' }}
+            >
+              <div className="w-3.5 h-3.5 rounded-full bg-sky-400 border-2 border-slate-950 shadow-md flex items-center justify-center text-[7px] font-black text-slate-950">
+                E2
+              </div>
+              <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
+                <span className="text-sky-300 font-bold block bg-slate-950/90 px-1 rounded border border-sky-800/60">
+                  E2: {formatPrice(e2Price)}
+                  <span className="text-[9px] font-extrabold text-sky-400 block -mt-0.5">
+                    {getDeltaPct(e2Price)}
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Marcador E1 */}
+          <div 
+            className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+            style={{ left: `${tradeEntryPos}%`, transform: 'translate(-50%, -50%)' }}
+          >
+            <div className="w-4 h-4 rounded-full bg-cyan-400 ring-4 ring-cyan-500/20 border-2 border-slate-950 shadow-md flex items-center justify-center text-[7px] font-black text-slate-950">
+              E1
+            </div>
+            <div className="absolute bottom-4 text-center whitespace-nowrap font-mono text-[10px]">
+              <span className="text-cyan-300 font-bold block bg-slate-950/90 px-1 rounded border border-cyan-700/80">
+                E1: {formatPrice(entryPrice)}
+                <span className="text-[9px] font-extrabold text-cyan-400 block -mt-0.5">
+                  {getDeltaPct(entryPrice)}
+                </span>
+              </span>
+            </div>
+          </div>
+
+          {/* Marcador LIVE */}
+          <div 
+            className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none z-30 transition-all duration-300"
+            style={{ left: `${tradeLivePos}%`, transform: 'translateX(-50%)' }}
+          >
+            <span className="bg-cyan-400 text-slate-950 font-mono text-[10px] font-black px-1.5 py-0.5 rounded shadow-lg shadow-cyan-500/40 -translate-y-2">
+              {formatPrice(livePrice)}
+            </span>
+            <div className="w-0.5 flex-1 bg-cyan-400 shadow-[0_0_8px_#38bdf8]" />
+            <span className="bg-cyan-950 text-cyan-300 border border-cyan-400/80 font-mono text-[9px] font-bold px-1 rounded translate-y-1">
+              LIVE
+            </span>
+          </div>
+
+          {/* Marcadores TP1, TP2, TP3 */}
+          <div 
+            className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+            style={{ left: `${tradeTp1Pos}%`, transform: 'translate(-50%, -50%)' }}
+          >
+            <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
+            <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
+              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60">
+                TP1: {formatPrice(tp1)}
+                <span className="text-[9px] font-extrabold text-emerald-400 block -mt-0.5">
+                  {getDeltaPct(tp1)}
+                </span>
+              </span>
+            </div>
+          </div>
+
+          <div 
+            className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+            style={{ left: `${tradeTp2Pos}%`, transform: 'translate(-50%, -50%)' }}
+          >
+            <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
+            <div className="absolute bottom-4 text-center whitespace-nowrap font-mono text-[10px]">
+              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60">
+                TP2: {formatPrice(tp2)}
+                <span className="text-[9px] font-extrabold text-emerald-400 block -mt-0.5">
+                  {getDeltaPct(tp2)}
+                </span>
+              </span>
+            </div>
+          </div>
+
+          <div 
+            className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+            style={{ left: `${tradeTp3Pos}%`, transform: 'translate(-50%, -50%)' }}
+          >
+            <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-md" />
+            <div className="absolute top-4 text-center whitespace-nowrap font-mono text-[10px]">
+              <span className="text-emerald-300 font-bold block bg-slate-950/90 px-1 rounded border border-emerald-900/60">
+                TP3: {formatPrice(tp3)}
+                <span className="text-[9px] font-extrabold text-emerald-400 block -mt-0.5">
+                  {getDeltaPct(tp3)}
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Sección Expandible: Multitemporalidades */}
+        {isExpanded && (
+          <div className="relative pt-3 border-t border-slate-800/80 bg-slate-950/90 rounded-xl p-3 mt-2 space-y-3">
+            {/* Leyenda interactiva */}
+            <div className="flex items-center justify-between flex-wrap gap-2 text-[10px] font-mono text-slate-400 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> O</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> C (Alcista)</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400" /> C (Bajista)</span>
+                <span className="flex items-center gap-1 text-cyan-300 font-bold">● LIVE</span>
+              </div>
+              <span className="text-[9px] text-amber-300 font-mono">
+                Escala: {formatPrice(minDailyScale)} — {formatPrice(maxDailyScale)}
+              </span>
+            </div>
+
+            {/* Pistas Multitemporales con Conectores Fractal SVG */}
+            <div className="flex gap-2 sm:gap-3">
+              {/* Columna Izquierda: Etiquetas */}
+              <div className="w-28 sm:w-32 shrink-0 flex flex-col justify-between py-0.5 space-y-2">
+                {timeframesList.map((tf) => {
+                  const isUp = tf.changePercent >= 0;
+                  const isPub = (tf as any).isPublicationTimeframe;
+                  const isDiario = tf.timeframe === '1d';
+                  return (
+                    <div 
+                      key={tf.timeframe}
+                      className={`h-7 flex items-center justify-between px-2 rounded font-mono text-[11px] border ${
+                        isDiario
+                          ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
+                          : isPub 
+                          ? 'bg-cyan-950/50 border-cyan-500/50 text-cyan-200' 
+                          : 'bg-slate-950 border-slate-800 text-slate-300'
+                      }`}
+                    >
+                      <span className="font-extrabold truncate">{tf.label}</span>
+                      <span className={`font-bold text-[9px] ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {isUp ? '+' : ''}{tf.changePercent.toFixed(1)}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Columna Derecha: Pistas */}
+              <div className="flex-1 relative flex flex-col justify-between py-0.5 space-y-2">
+                {/* Guías Verticales */}
+                <div className="absolute top-0 bottom-0 z-20 pointer-events-none border-r border-dashed border-cyan-500/70" style={{ left: `${dailyEntryPos}%` }} />
+                <div className="absolute top-0 bottom-0 z-20 pointer-events-none border-r border-cyan-400/80 shadow-[0_0_6px_#38bdf8]" style={{ left: `${dailyLivePos}%` }} />
+                <div className="absolute top-0 bottom-0 z-10 pointer-events-none border-r border-dashed border-amber-500/40" style={{ left: `${dailySlPos}%` }} />
+
+                {/* SVG Connectors de Alta Fidelidad sin distorsión de aspecto */}
+                {showConnectors && (
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none z-15 overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="compactConnGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.95" />
+                        <stop offset="50%" stopColor="#818cf8" stopOpacity="0.95" />
+                        <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.95" />
+                      </linearGradient>
+                    </defs>
+                    {connections.map((c, i) => {
+                      const midY = (c.y1 + c.y2) / 2;
+                      const pathD = `M ${c.x1} ${c.y1} C ${c.x1} ${midY}, ${c.x2} ${midY}, ${c.x2} ${c.y2}`;
+                      return (
+                        <g key={`compact-conn-${i}`}>
+                          {/* Sombra de Resplandor Neón */}
+                          <path 
+                            d={pathD} 
+                            fill="none" 
+                            stroke="rgba(56, 189, 248, 0.25)" 
+                            strokeWidth="3.5" 
+                            vectorEffect="non-scaling-stroke" 
+                          />
+                          {/* Línea discontinua nítida y estilizada */}
+                          <path 
+                            d={pathD} 
+                            fill="none" 
+                            stroke="url(#compactConnGrad)" 
+                            strokeWidth="1.8" 
+                            strokeDasharray="6,4" 
+                            vectorEffect="non-scaling-stroke" 
+                            className="opacity-95" 
+                          />
+                          {/* Terminales de anclaje */}
+                          <circle cx={c.x1} cy={c.y1} r="2" fill="#38bdf8" vectorEffect="non-scaling-stroke" />
+                          <circle cx={c.x2} cy={c.y2} r="2" fill="#818cf8" vectorEffect="non-scaling-stroke" />
+                        </g>
+                      );
+                    })}
+                  </svg>
+                )}
+
+                {/* Velas */}
+                {timeframesList.map((tf) => {
+                  const isUp = tf.changePercent >= 0;
+                  const isPub = (tf as any).isPublicationTimeframe;
+                  const isDiario = tf.timeframe === '1d';
+                  const openPos = getDailyPercentPos(tf.open);
+                  const closePos = getDailyPercentPos(tf.close);
+                  const leftPos = Math.min(openPos, closePos);
+                  const widthPos = Math.max(1, Math.abs(closePos - openPos));
+
+                  return (
+                    <div key={tf.timeframe} className="h-7 relative flex items-center">
+                      <div className="absolute left-0 right-0 h-1.5 bg-slate-900 rounded-full border border-slate-800" />
+                      {/* Barra de Vela */}
+                      <div 
+                        className={`absolute h-4 rounded-full ${
+                          isDiario 
+                            ? (isUp ? 'bg-gradient-to-r from-amber-500 to-emerald-400' : 'bg-gradient-to-r from-amber-500 to-rose-400')
+                            : isPub 
+                            ? 'bg-gradient-to-r from-cyan-400 to-rose-400' 
+                            : isUp ? 'bg-emerald-500' : 'bg-rose-500'
+                        }`}
+                        style={{ left: `${leftPos}%`, width: `${widthPos}%` }}
+                      />
+                      {/* Marcador Apertura O */}
+                      <div className="absolute w-2.5 h-2.5 rounded-full bg-amber-400 border border-slate-950 z-10" style={{ left: `${openPos}%`, transform: 'translateX(-50%)' }} />
+                      {/* Marcador Cierre C */}
+                      <div className={`absolute w-2.5 h-2.5 rounded-full ${isUp ? 'bg-emerald-400' : 'bg-rose-400'} border border-slate-950 z-10`} style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-950 border border-slate-800/90 rounded-2xl p-4 sm:p-5 text-slate-100 shadow-2xl overflow-hidden font-sans select-none my-3 space-y-5">

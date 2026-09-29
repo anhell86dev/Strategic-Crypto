@@ -4,6 +4,7 @@ import { indicatorsService } from '../services/indicatorsService';
 import { multiTimeframeService } from '../services/multiTimeframeService';
 import { MiniSparkline } from './MiniSparkline';
 import { StrategyConfluencePanel } from './StrategyConfluencePanel';
+import { HorizontalPriceScaleBar } from './HorizontalPriceScaleBar';
 import { 
   Trophy, 
   Flame, 
@@ -523,15 +524,15 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const tp2GainPct = getTpGainPct(pTp2);
               const tp3GainPct = getTpGainPct(pTp3);
 
-              const stratWithUpdatedTps = {
+              const stratWithUpdatedTps: StrategyWithOrders = {
                 ...strat,
                 entryPrice: pE1,
                 e2Price: hasE2 ? pE2 : undefined,
                 e3Price: hasE3 ? pE3 : undefined,
                 orders: [
-                  { type: 'TP1', targetPrice: pTp1, closePercentage: closePctTp1 },
-                  { type: 'TP2', targetPrice: pTp2, closePercentage: closePctTp2 },
-                  { type: 'TP3', targetPrice: pTp3, closePercentage: closePctTp3 },
+                  { strategyId: strat.id, type: 'TP1', targetPrice: pTp1, closePercentage: closePctTp1 },
+                  { strategyId: strat.id, type: 'TP2', targetPrice: pTp2, closePercentage: closePctTp2 },
+                  { strategyId: strat.id, type: 'TP3', targetPrice: pTp3, closePercentage: closePctTp3 },
                 ]
               };
 
@@ -1130,115 +1131,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             </div>
                           </td>
 
-                          {/* Cols 6 to 11: ONE Single Continuous Price Line ANCHORED to the bottom of the cells */}
-                          <td colSpan={6} className="py-1.5 px-2.5 border-r border-slate-800 bg-slate-950/95 font-mono border-t-0 align-middle">
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="text-[10px] font-bold text-slate-400 font-mono uppercase tracking-wider">
-                                Rango Táctico (SL ➔ DCA ➔ TPs)
-                              </span>
-                            </div>
-
-                            <div className="relative w-full pt-0 pb-0">
-                              {/* UNA SOLA LÍNEA DE PRECIO CONTINUA MÁS ANCHA CON LÍNEAS DE SEPARACIÓN */}
-                              <div className="relative w-full h-8 rounded-full overflow-hidden flex border-2 border-slate-700/90 bg-slate-900 shadow-inner">
-                                {/* Red Segment (Stop Loss) - Estrecho, alineado con columna SL */}
-                                <div className="w-11 shrink-0 h-full bg-gradient-to-r from-rose-950 via-rose-900 to-rose-850/90 border-r border-rose-500/40 flex items-center justify-center text-[9px] font-black text-rose-200/90 tracking-tighter select-none z-10">
-                                  {getBeDiffPctStr(slPrice)}
-                                </div>
-
-                                {/* Cyan/Blue Segments (DCA E3, E2, E1) - flex-1 con líneas de separación limpias */}
-                                <div className="flex-1 h-full bg-cyan-950/60 border-r border-cyan-500/30" />
-                                <div className="flex-1 h-full bg-sky-950/60 border-r border-cyan-500/30" />
-                                <div className="flex-1 h-full bg-blue-950/70 border-r border-cyan-500/50" />
-
-                                {/* Green Segments (Take Profit TP1, TP2, TP3) - flex-1 con porcentaje desde BE hacia cada TP */}
-                                <div className="flex-1 h-full bg-emerald-950/50 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
-                                  {getBeDiffPctStr(tp1Data?.price)}
-                                </div>
-                                <div className="flex-1 h-full bg-emerald-950/70 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
-                                  {getBeDiffPctStr(tp2Data?.price)}
-                                </div>
-                                <div className="flex-1 h-full bg-emerald-900/80 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
-                                  {getBeDiffPctStr(tp3Data?.price)}
-                                </div>
-
-                                {/* Línea horizontal central de separación / riel guía */}
-                                <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-[1px] bg-slate-500/25 pointer-events-none z-0" />
-
-                                {/* BARRA HORIZONTAL DE RELLENO DEL PRECIO LIVE CON MOVIMIENTO DIRECCIONAL */}
-                                {posPct >= refEntryPosPct ? (
-                                  <div 
-                                    className="absolute top-0 bottom-0 transition-all duration-300 pointer-events-none z-20 overflow-hidden"
-                                    style={{ 
-                                      left: `${refEntryPosPct}%`, 
-                                      width: `${Math.max(1, posPct - refEntryPosPct)}%` 
-                                    }}
-                                  >
-                                    {/* Fondo degradado esmeralda */}
-                                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/50 via-emerald-400/60 to-emerald-200/90 shadow-[inset_0_0_12px_rgba(52,211,153,0.6)]" />
-                                    {/* Flujo animado de líneas diagonales hacia la derecha */}
-                                    <div className="absolute inset-0 animate-flow-bar-right opacity-70" />
-                                    {/* Micro flechas direccionales hacia la derecha */}
-                                    <div className="absolute inset-0 flex items-center justify-around overflow-hidden opacity-60 text-[11px] font-black text-white select-none animate-directional-right">
-                                      <span>›</span><span>›</span><span>›</span><span>›</span>
-                                    </div>
-                                    {/* Cursor iluminado con ping en el extremo derecho */}
-                                    <div className="absolute right-0 top-0 bottom-0 w-[4px] bg-white shadow-[0_0_16px_#34d399] z-10 flex items-center justify-center">
-                                      <span className="absolute -right-1 text-[8px] text-white font-black animate-directional-right">▶</span>
-                                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping absolute" />
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div 
-                                    className="absolute top-0 bottom-0 transition-all duration-300 pointer-events-none z-20 overflow-hidden"
-                                    style={{ 
-                                      left: `${posPct}%`, 
-                                      width: `${Math.max(1, refEntryPosPct - posPct)}%` 
-                                    }}
-                                  >
-                                    {/* Fondo degradado rosa/rojo */}
-                                    <div className="absolute inset-0 bg-gradient-to-r from-rose-200/90 via-rose-400/60 to-rose-500/50 shadow-[inset_0_0_12px_rgba(244,63,94,0.6)]" />
-                                    {/* Flujo animado de líneas diagonales hacia la izquierda */}
-                                    <div className="absolute inset-0 animate-flow-bar-left opacity-70" />
-                                    {/* Micro flechas direccionales hacia la izquierda */}
-                                    <div className="absolute inset-0 flex items-center justify-around overflow-hidden opacity-60 text-[11px] font-black text-white select-none animate-directional-left">
-                                      <span>‹</span><span>‹</span><span>‹</span><span>‹</span>
-                                    </div>
-                                    {/* Cursor iluminado con ping en el extremo izquierdo */}
-                                    <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-white shadow-[0_0_16px_#f43f5e] z-10 flex items-center justify-center">
-                                      <span className="absolute -left-1 text-[8px] text-white font-black animate-directional-left">◀</span>
-                                      <span className="w-2.5 h-2.5 rounded-full bg-rose-300 animate-ping absolute" />
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* LÍNEA DE REFERENCIA DE ENTRADA (E1 o BE Global) SIN ETIQUETA DE PNL */}
-                              {refEntryPrice > 0 && (
-                                <div 
-                                  className="absolute top-0 bottom-0 -translate-x-1/2 z-25 flex items-center justify-center pointer-events-none h-8"
-                                  style={{ left: `${refEntryPosPct}%` }}
-                                >
-                                  {/* Línea divisoria vertical a toda la altura de la barra */}
-                                  <div className={`w-[2.5px] h-8 ${hasDcaActive ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.9)]' : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]'}`} />
-                                </div>
-                              )}
-
-                              {/* Cursor compacto de precio LIVE sobre la barra */}
-                              <div 
-                                className="absolute top-0 bottom-0 -translate-x-1/2 transition-all duration-300 z-30 flex items-center justify-center pointer-events-none whitespace-nowrap h-8"
-                                style={{ left: `${Math.max(8, Math.min(92, posPct))}%` }}
-                              >
-                                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 shadow-md border backdrop-blur-md ${
-                                  isAdvancing
-                                    ? 'bg-slate-950 text-emerald-300 border-emerald-400 shadow-emerald-500/40 ring-1 ring-emerald-500/40'
-                                    : 'bg-slate-950 text-rose-300 border-rose-400 shadow-rose-500/40 ring-1 ring-rose-500/40'
-                                }`}>
-                                  <span className={`w-1.5 h-1.5 rounded-full ${isAdvancing ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`} />
-                                  <span>LIVE: {formatPrice(currentPrice)}</span>
-                                </div>
-                              </div>
-                            </div>
+                          {/* Cols 6 to 11: Barra Horizontal de Precios Multitemporal Compacta con botón de expansión */}
+                          <td colSpan={6} className="py-2 px-3 border-r border-slate-800 bg-slate-950 font-mono border-t-0 align-middle">
+                            <HorizontalPriceScaleBar strategy={stratWithUpdatedTps} compact={true} defaultExpanded={false} />
                           </td>
                         </tr>
                       </React.Fragment>
