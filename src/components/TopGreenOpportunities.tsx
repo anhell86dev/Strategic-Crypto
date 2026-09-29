@@ -567,7 +567,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 <React.Fragment key={strat.id}>
                   <tr
                     onClick={() => onSelectStrategy && onSelectStrategy(strat)}
-                    className={`group transition-colors duration-200 cursor-pointer ${
+                    className={`group transition-colors duration-200 cursor-pointer border-t-4 border-cyan-500/30 ${
                       operational.isTriggerZoneActive
                         ? 'bg-cyan-950/50 hover:bg-cyan-950/70 shadow-lg shadow-cyan-500/20'
                         : idx === 0 
@@ -1136,6 +1136,23 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             <HorizontalPriceScaleBar strategy={stratWithUpdatedTps} compact={true} defaultExpanded={false} />
                           </td>
                         </tr>
+
+                        {/* Separador Visual Grueso y Espacioso entre Estrategias */}
+                        {idx < topStrategies.length - 1 && (
+                          <tr className="h-6 bg-slate-950 pointer-events-none select-none border-y-2 border-slate-800/80">
+                            <td colSpan={11} className="p-0 bg-slate-950">
+                              <div className="h-6 w-full flex items-center justify-between px-6 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950">
+                                <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+                                <div className="px-4 text-[10px] font-mono font-black text-cyan-300 uppercase tracking-widest flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                                  <span>FIN ESTRATEGIA #{idx + 1} ({strat.symbol.replace(/USDT$/i, '')}) · SIGUIENTE OPORTUNIDAD #{idx + 2}</span>
+                                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                                </div>
+                                <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+                              </div>
+                            </td>
+                          </tr>
+                        )}
                       </React.Fragment>
                     );
                   })()}
