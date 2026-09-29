@@ -553,8 +553,8 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
             {/* Pistas Multitemporales con Conectores Fractal SVG */}
             <div className="flex gap-2 sm:gap-3">
-              {/* Columna Izquierda: Etiquetas */}
-              <div className="w-28 sm:w-32 shrink-0 flex flex-col justify-between py-0.5 space-y-2">
+              {/* Columna Izquierda: Etiquetas con Precios O y C */}
+              <div className="w-32 sm:w-40 shrink-0 flex flex-col justify-between py-0.5 space-y-2">
                 {timeframesList.map((tf) => {
                   const isUp = tf.changePercent >= 0;
                   const isPub = (tf as any).isPublicationTimeframe;
@@ -562,7 +562,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                   return (
                     <div 
                       key={tf.timeframe}
-                      className={`h-7 flex items-center justify-between px-2 rounded font-mono text-[11px] border ${
+                      className={`h-7 flex flex-col justify-center px-2 rounded font-mono text-[10px] border ${
                         isDiario
                           ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
                           : isPub 
@@ -570,10 +570,16 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                           : 'bg-slate-950 border-slate-800 text-slate-300'
                       }`}
                     >
-                      <span className="font-extrabold truncate">{tf.label}</span>
-                      <span className={`font-bold text-[9px] ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {isUp ? '+' : ''}{tf.changePercent.toFixed(1)}%
-                      </span>
+                      <div className="flex items-center justify-between leading-none">
+                        <span className="font-extrabold truncate">{tf.label}</span>
+                        <span className={`font-bold text-[9px] ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {isUp ? '+' : ''}{tf.changePercent.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[8px] text-slate-400 leading-tight mt-0.5 font-mono">
+                        <span className="text-amber-300/90 font-bold">O:{formatPrice(tf.open)}</span>
+                        <span className={isUp ? 'text-emerald-300/90 font-bold' : 'text-rose-300/90 font-bold'}>C:{formatPrice(tf.close)}</span>
+                      </div>
                     </div>
                   );
                 })}
@@ -619,9 +625,6 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                             vectorEffect="non-scaling-stroke" 
                             className="opacity-95" 
                           />
-                          {/* Terminales de anclaje */}
-                          <circle cx={c.x1} cy={c.y1} r="2" fill="#38bdf8" vectorEffect="non-scaling-stroke" />
-                          <circle cx={c.x2} cy={c.y2} r="2" fill="#818cf8" vectorEffect="non-scaling-stroke" />
                         </g>
                       );
                     })}
@@ -652,10 +655,29 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                         }`}
                         style={{ left: `${leftPos}%`, width: `${widthPos}%` }}
                       />
-                      {/* Marcador Apertura O */}
-                      <div className="absolute w-2.5 h-2.5 rounded-full bg-amber-400 border border-slate-950 z-10" style={{ left: `${openPos}%`, transform: 'translateX(-50%)' }} />
-                      {/* Marcador Cierre C */}
-                      <div className={`absolute w-2.5 h-2.5 rounded-full ${isUp ? 'bg-emerald-400' : 'bg-rose-400'} border border-slate-950 z-10`} style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }} />
+                      {/* Marcador Apertura O con Tooltip y Micro-etiqueta */}
+                      <div 
+                        className="group/marker absolute z-20"
+                        style={{ left: `${openPos}%`, transform: 'translateX(-50%)' }}
+                        title={`${tf.label} Apertura (O): ${formatPrice(tf.open)}`}
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-400 border border-slate-950 hover:scale-125 transition-transform cursor-pointer" />
+                        <div className="hidden group-hover/marker:flex absolute -top-5 left-1/2 -translate-x-1/2 bg-slate-950/95 border border-amber-500/60 text-amber-300 font-mono text-[8px] font-bold px-1 py-0.5 rounded shadow-lg whitespace-nowrap pointer-events-none z-30">
+                          O: {formatPrice(tf.open)}
+                        </div>
+                      </div>
+
+                      {/* Marcador Cierre C con Tooltip y Micro-etiqueta */}
+                      <div 
+                        className="group/marker absolute z-20"
+                        style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }}
+                        title={`${tf.label} Cierre (C): ${formatPrice(tf.close)}`}
+                      >
+                        <div className={`w-2.5 h-2.5 rounded-full ${isUp ? 'bg-emerald-400' : 'bg-rose-400'} border border-slate-950 hover:scale-125 transition-transform cursor-pointer`} />
+                        <div className={`hidden group-hover/marker:flex absolute -bottom-5 left-1/2 -translate-x-1/2 bg-slate-950/95 border ${isUp ? 'border-emerald-500/60 text-emerald-300' : 'border-rose-500/60 text-rose-300'} font-mono text-[8px] font-bold px-1 py-0.5 rounded shadow-lg whitespace-nowrap pointer-events-none z-30`}>
+                          C: {formatPrice(tf.close)}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -1061,12 +1083,6 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                           className="animate-dash-flow"
                           vectorEffect="non-scaling-stroke"
                         />
-
-                        {/* Origin terminal dot: Cierre */}
-                        <circle cx={conn.x1} cy={conn.y1} r="0.9" fill="#38bdf8" />
-
-                        {/* Destination terminal dot: Apertura */}
-                        <circle cx={conn.x2} cy={conn.y2} r="0.9" fill="#fbbf24" />
                       </g>
                     );
                   })}
