@@ -11,7 +11,8 @@ import {
   Scale, 
   CheckCircle2, 
   Award,
-  Copy
+  Copy,
+  ShieldCheck
 } from 'lucide-react';
 
 interface TopGreenOpportunitiesProps {
@@ -238,11 +239,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 </div>
               </th>
               <th rowSpan={2} className="py-3 px-3 text-center border-r border-slate-800">Nominal ($)</th>
-              
-              {/* Single Stop Loss Column */}
-              <th rowSpan={2} className="py-3 px-3 text-center text-rose-300 bg-rose-950/90 border-r border-slate-800">
-                Stop Loss
-              </th>
 
               {/* Group 2: Entradas DCA */}
               <th colSpan={3} className="py-2 px-3 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
@@ -258,19 +254,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
             {/* Sub-Headers Row 2 */}
             <tr className="border-b-2 border-emerald-500/40 text-[11px] font-black uppercase tracking-wider bg-slate-950">
               {/* DCA Sub-headers (inverted: E3, E2, E1) */}
-              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40">
+              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[95px]">
                 <div className="flex flex-col items-center">
                   <span>E3</span>
                   <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / act</span>
                 </div>
               </th>
-              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40">
+              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[95px]">
                 <div className="flex flex-col items-center">
                   <span>E2</span>
                   <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / act</span>
                 </div>
               </th>
-              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800">
+              <th className="py-2 px-2 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800 min-w-[95px]">
                 <div className="flex flex-col items-center">
                   <span>E1</span>
                   <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / act</span>
@@ -278,14 +274,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               </th>
 
               {/* Take Profit Sub-headers */}
-              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40">TP1</th>
-              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40">TP2</th>
-              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40">TP3</th>
+              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[85px]">TP1</th>
+              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[85px]">TP2</th>
+              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 min-w-[85px]">TP3</th>
             </tr>
           </thead>
 
           {/* Table Body */}
-          <tbody className="divide-y divide-slate-800/80 text-xs sm:text-sm">
+          <tbody className="text-xs sm:text-sm">
             {topStrategies.map((strat, idx) => {
               const isLong = strat.type === 'LONG';
               const currentPrice = strat.currentPrice || strat.entryPrice;
@@ -340,6 +336,26 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
               const totalAssets = assetsE1 + assetsE2 + assetsE3;
               const avgEntryPrice = totalAssets > 0 ? nominalTotal / totalAssets : pE1;
+
+              // Determinar en cuál Entrada (E1, E2 o E3) se encuentra el precio LIVE
+              let liveActiveEntry: 'e1' | 'e2' | 'e3' | null = null;
+              if (currentPrice > 0 && pE1 > 0) {
+                const distE1 = Math.abs(currentPrice - pE1);
+                const distE2 = (hasE2 && pE2 > 0) ? Math.abs(currentPrice - pE2) : Infinity;
+                const distE3 = (hasE3 && pE3 > 0) ? Math.abs(currentPrice - pE3) : Infinity;
+
+                if (distE3 <= distE2 && distE3 <= distE1) {
+                  liveActiveEntry = 'e3';
+                } else if (distE2 <= distE1) {
+                  liveActiveEntry = 'e2';
+                } else {
+                  liveActiveEntry = 'e1';
+                }
+              }
+
+              const isE1Live = liveActiveEntry === 'e1';
+              const isE2Live = liveActiveEntry === 'e2';
+              const isE3Live = liveActiveEntry === 'e3';
 
               // Loss calculations for Stop Loss
               const slPrice = strat.stopLoss || 0;
@@ -417,6 +433,25 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const tp2Data = calcTpProfitActive(tp2);
               const tp3Data = calcTpProfitActive(tp3);
 
+              const hasDcaActive = (checked.e2 && hasE2) || (checked.e3 && hasE3);
+              const refEntryPrice = hasDcaActive ? activeAvgEntryPrice : pE1;
+
+              const liveVsEntryPct = refEntryPrice > 0
+                ? ((currentPrice - refEntryPrice) / refEntryPrice) * 100 * (isLong ? 1 : -1)
+                : 0;
+              const isAdvancing = liveVsEntryPct >= 0;
+
+              const livePnlUsd = activeAssets > 0
+                ? (isLong
+                    ? activeAssets * (currentPrice - refEntryPrice)
+                    : activeAssets * (refEntryPrice - currentPrice))
+                : 0;
+
+              const slDiffPct = refEntryPrice > 0 
+                ? ((slPrice - refEntryPrice) / refEntryPrice) * 100 * (isLong ? 1 : -1) 
+                : 0;
+              const slDiffPctStr = `${slDiffPct > 0 ? '+' : ''}${slDiffPct.toFixed(1)}%`;
+
               return (
                 <React.Fragment key={strat.id}>
                   <tr
@@ -430,7 +465,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     }`}
                   >
                     {/* Rank Column */}
-                    <td className="py-3 px-3 text-center border-r border-slate-800">
+                    <td rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-800 align-top">
                       <div className="flex items-center justify-center">
                         <span 
                           title={rankInfo.title}
@@ -443,7 +478,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* Semáforo Verde & Badges FAPI */}
-                    <td className="py-3 px-3 whitespace-nowrap border-r border-slate-800">
+                    <td rowSpan={2} className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800 align-top">
                       <div className="flex flex-col gap-1.5">
                         <div 
                           className="inline-flex items-center gap-2 px-2.5 py-1 rounded-xl bg-emerald-950 border border-emerald-400 text-emerald-300 shadow-sm w-fit"
@@ -465,7 +500,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* Par / Dirección / Ratio R:B */}
-                    <td className="py-3 px-3 border-r border-slate-800">
+                    <td rowSpan={2} className="py-2.5 px-3 border-r border-slate-800 align-top">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-black text-white text-base group-hover:text-emerald-300 transition-colors">
                           {symbolClean}/USDT
@@ -494,7 +529,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* Precio LIVE / Distancia a Entrada */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap border-r border-slate-800">
+                    <td rowSpan={2} className="py-2.5 px-3 text-center whitespace-nowrap border-r border-slate-800 align-top">
                       <div className="flex flex-col items-center">
                         <span className="font-black text-white text-sm sm:text-base font-mono">
                           {formatPrice(currentPrice)}
@@ -507,11 +542,20 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           <Target className="w-3 h-3 text-cyan-400" />
                           <span>{distPct <= 0.1 ? 'En Zona DCA' : `${distPct.toFixed(2)}% E1`}</span>
                         </span>
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded mt-1 border shadow-xs ${
+                          isAdvancing 
+                            ? 'text-emerald-300 bg-emerald-950/90 border-emerald-600/70' 
+                            : 'text-rose-300 bg-rose-950/90 border-rose-600/70'
+                        }`}>
+                          {isAdvancing 
+                            ? (hasDcaActive ? '📈 Ganancia BE' : '📈 Ganancia E1') 
+                            : (hasDcaActive ? '📉 Bajo BE' : '📉 Bajo E1')}
+                        </span>
                       </div>
                     </td>
 
                     {/* Inversión ($) */}
-                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-slate-800">
+                    <td rowSpan={2} className="py-2.5 px-2 text-center whitespace-nowrap border-r border-slate-800 align-top">
                       <div className="flex items-center justify-center">
                         <input
                           type="number"
@@ -530,7 +574,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* Apalancamiento (x) */}
-                    <td className="py-3 px-2 text-center whitespace-nowrap border-r border-slate-800">
+                    <td rowSpan={2} className="py-2.5 px-2 text-center whitespace-nowrap border-r border-slate-800 align-top">
                       <div className="flex items-center justify-center">
                         <input
                           type="number"
@@ -549,25 +593,29 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* Nominal ($) */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap border-r border-slate-800">
+                    <td rowSpan={2} className="py-2.5 px-3 text-center whitespace-nowrap border-r border-slate-800 align-top">
                       <span className="font-black text-cyan-200 text-sm font-mono bg-cyan-950 border border-cyan-500/70 px-2.5 py-1.5 rounded-xl shadow-sm inline-block">
                         ${nominalTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </td>
 
-                    {/* Stop Loss (Solo Precio) */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap bg-rose-950/20 border-r border-slate-800 font-mono">
-                      <span className="font-black text-rose-300 text-sm">
-                        {formatPrice(slPrice)}
-                      </span>
-                    </td>
-
                     {/* DCA E3 (Solo Precio y Activos con Checkbox) */}
-                    <td className={`py-2 px-2 text-center whitespace-nowrap border-r border-cyan-800/40 transition-all ${
-                      checked.e3 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
+                    <td className={`py-2 px-2 text-center whitespace-nowrap border-r border-cyan-800/40 border-b-0 transition-all ${
+                      isE3Live
+                        ? 'bg-cyan-500/25 ring-2 ring-cyan-400 ring-inset shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                        : checked.e3 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
                     }`}>
                       {hasE3 ? (
                         <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {/* Badge Iluminado de Precio LIVE */}
+                          {isE3Live && (
+                            <div className="flex items-center justify-center mb-0.5">
+                              <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-cyan-400 text-slate-950 shadow-[0_0_12px_rgba(34,211,238,0.9)] animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />
+                                LIVE AQUÍ
+                              </span>
+                            </div>
+                          )}
                           {/* Fila 1: Checkbox + Precio */}
                           <div className="flex items-center justify-center gap-1">
                             <input
@@ -584,7 +632,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               value={pE3 || ''}
                               onChange={(e) => handleCustomPriceChange(strat.id, 'e3', e.target.value)}
                               className={`w-20 px-1.5 py-0.5 text-xs text-center font-bold font-mono rounded border transition-all ${
-                                checked.e3
+                                isE3Live
+                                  ? 'bg-cyan-950 text-white border-cyan-300 ring-2 ring-cyan-400/90 shadow-md font-black'
+                                  : checked.e3
                                   ? 'bg-slate-900 text-cyan-200 border-cyan-500/80 focus:border-cyan-300 focus:ring-1 focus:ring-cyan-300'
                                   : 'bg-slate-950 text-slate-500 border-slate-700/60'
                               }`}
@@ -593,7 +643,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           </div>
                           {/* Fila 2: Cantidad de Activos Editable */}
                           <div className="flex items-center justify-center gap-1">
-                            <span className="text-[10px] text-cyan-400/90 font-bold uppercase font-mono tracking-tighter" title="Cantidad de activos">Act:</span>
+                            <span className={`text-[10px] font-bold uppercase font-mono tracking-tighter ${isE3Live ? 'text-cyan-200 font-black' : 'text-cyan-400/90'}`} title="Cantidad de activos">Act:</span>
                             <input
                               type="number"
                               step="any"
@@ -601,7 +651,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               value={stratCustomAssets.e3 !== undefined ? stratCustomAssets.e3 : (assetsE3 > 0 ? (assetsE3 < 1 ? Number(assetsE3.toFixed(4)) : Number(assetsE3.toFixed(2))) : '')}
                               onChange={(e) => handleCustomAssetsChange(strat.id, 'e3', e.target.value)}
                               className={`w-20 px-1.5 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all ${
-                                checked.e3
+                                isE3Live
+                                  ? 'bg-slate-900 text-emerald-200 border-emerald-400 ring-1 ring-emerald-400 font-black'
+                                  : checked.e3
                                   ? 'bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300'
                                   : 'bg-slate-950 text-slate-500 border-slate-700/60'
                               }`}
@@ -615,11 +667,22 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* DCA E2 (Solo Precio y Activos con Checkbox) */}
-                    <td className={`py-2 px-2 text-center whitespace-nowrap border-r border-cyan-800/40 transition-all ${
-                      checked.e2 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
+                    <td className={`py-2 px-2 text-center whitespace-nowrap border-r border-cyan-800/40 border-b-0 transition-all ${
+                      isE2Live
+                        ? 'bg-cyan-500/25 ring-2 ring-cyan-400 ring-inset shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                        : checked.e2 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
                     }`}>
                       {hasE2 ? (
                         <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {/* Badge Iluminado de Precio LIVE */}
+                          {isE2Live && (
+                            <div className="flex items-center justify-center mb-0.5">
+                              <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-cyan-400 text-slate-950 shadow-[0_0_12px_rgba(34,211,238,0.9)] animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />
+                                LIVE AQUÍ
+                              </span>
+                            </div>
+                          )}
                           {/* Fila 1: Checkbox + Precio */}
                           <div className="flex items-center justify-center gap-1">
                             <input
@@ -636,7 +699,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               value={pE2 || ''}
                               onChange={(e) => handleCustomPriceChange(strat.id, 'e2', e.target.value)}
                               className={`w-20 px-1.5 py-0.5 text-xs text-center font-bold font-mono rounded border transition-all ${
-                                checked.e2
+                                isE2Live
+                                  ? 'bg-cyan-950 text-white border-cyan-300 ring-2 ring-cyan-400/90 shadow-md font-black'
+                                  : checked.e2
                                   ? 'bg-slate-900 text-cyan-200 border-cyan-500/80 focus:border-cyan-300 focus:ring-1 focus:ring-cyan-300'
                                   : 'bg-slate-950 text-slate-500 border-slate-700/60'
                               }`}
@@ -645,7 +710,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           </div>
                           {/* Fila 2: Cantidad de Activos Editable */}
                           <div className="flex items-center justify-center gap-1">
-                            <span className="text-[10px] text-cyan-400/90 font-bold uppercase font-mono tracking-tighter" title="Cantidad de activos">Act:</span>
+                            <span className={`text-[10px] font-bold uppercase font-mono tracking-tighter ${isE2Live ? 'text-cyan-200 font-black' : 'text-cyan-400/90'}`} title="Cantidad de activos">Act:</span>
                             <input
                               type="number"
                               step="any"
@@ -653,7 +718,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               value={stratCustomAssets.e2 !== undefined ? stratCustomAssets.e2 : (assetsE2 > 0 ? (assetsE2 < 1 ? Number(assetsE2.toFixed(4)) : Number(assetsE2.toFixed(2))) : '')}
                               onChange={(e) => handleCustomAssetsChange(strat.id, 'e2', e.target.value)}
                               className={`w-20 px-1.5 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all ${
-                                checked.e2
+                                isE2Live
+                                  ? 'bg-slate-900 text-emerald-200 border-emerald-400 ring-1 ring-emerald-400 font-black'
+                                  : checked.e2
                                   ? 'bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300'
                                   : 'bg-slate-950 text-slate-500 border-slate-700/60'
                               }`}
@@ -667,10 +734,21 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* DCA E1 (Solo Precio y Activos con Checkbox) */}
-                    <td className={`py-2 px-2 text-center whitespace-nowrap border-r border-slate-800 transition-all ${
-                      checked.e1 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
+                    <td className={`py-2 px-2 text-center whitespace-nowrap border-r border-slate-800 border-b-0 transition-all ${
+                      isE1Live
+                        ? 'bg-cyan-500/25 ring-2 ring-cyan-400 ring-inset shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                        : checked.e1 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
                     }`}>
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        {/* Badge Iluminado de Precio LIVE */}
+                        {isE1Live && (
+                          <div className="flex items-center justify-center mb-0.5">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-cyan-400 text-slate-950 shadow-[0_0_12px_rgba(34,211,238,0.9)] animate-pulse">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />
+                              LIVE AQUÍ
+                            </span>
+                          </div>
+                        )}
                         {/* Fila 1: Checkbox + Precio */}
                         <div className="flex items-center justify-center gap-1">
                           <input
@@ -687,7 +765,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             value={pE1 || ''}
                             onChange={(e) => handleCustomPriceChange(strat.id, 'e1', e.target.value)}
                             className={`w-20 px-1.5 py-0.5 text-xs text-center font-bold font-mono rounded border transition-all ${
-                              checked.e1
+                              isE1Live
+                                ? 'bg-cyan-950 text-white border-cyan-300 ring-2 ring-cyan-400/90 shadow-md font-black'
+                                : checked.e1
                                 ? 'bg-slate-900 text-cyan-200 border-cyan-500/80 focus:border-cyan-300 focus:ring-1 focus:ring-cyan-300'
                                 : 'bg-slate-950 text-slate-500 border-slate-700/60'
                             }`}
@@ -696,7 +776,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                         </div>
                         {/* Fila 2: Cantidad de Activos Editable */}
                         <div className="flex items-center justify-center gap-1">
-                          <span className="text-[10px] text-cyan-400/90 font-bold uppercase font-mono tracking-tighter" title="Cantidad de activos">Act:</span>
+                          <span className={`text-[10px] font-bold uppercase font-mono tracking-tighter ${isE1Live ? 'text-cyan-200 font-black' : 'text-cyan-400/90'}`} title="Cantidad de activos">Act:</span>
                           <input
                             type="number"
                             step="any"
@@ -704,7 +784,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             value={stratCustomAssets.e1 !== undefined ? stratCustomAssets.e1 : (assetsE1 > 0 ? (assetsE1 < 1 ? Number(assetsE1.toFixed(4)) : Number(assetsE1.toFixed(2))) : '')}
                             onChange={(e) => handleCustomAssetsChange(strat.id, 'e1', e.target.value)}
                             className={`w-20 px-1.5 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all ${
-                              checked.e1
+                              isE1Live
+                                ? 'bg-slate-900 text-emerald-200 border-emerald-400 ring-1 ring-emerald-400 font-black'
+                                : checked.e1
                                 ? 'bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300'
                                 : 'bg-slate-950 text-slate-500 border-slate-700/60'
                             }`}
@@ -715,7 +797,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* TP1 (Solo Precio) */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono">
+                    <td rowSpan={2} className="py-3 px-3 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
                       {tp1Data ? (
                         <span className="font-black text-emerald-300 text-sm">
                           {formatPrice(tp1Data.price)}
@@ -726,7 +808,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* TP2 (Solo Precio) */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono">
+                    <td rowSpan={2} className="py-3 px-3 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
                       {tp2Data ? (
                         <span className="font-black text-emerald-300 text-sm">
                           {formatPrice(tp2Data.price)}
@@ -737,7 +819,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     </td>
 
                     {/* TP3 (Solo Precio) */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap bg-emerald-950/20 font-mono">
+                    <td rowSpan={2} className="py-3 px-3 text-center whitespace-nowrap bg-emerald-950/20 font-mono align-middle">
                       {tp3Data ? (
                         <span className="font-black text-emerald-300 text-sm">
                           {formatPrice(tp3Data.price)}
@@ -745,6 +827,36 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       ) : (
                         <span className="text-slate-500 font-mono text-xs">--</span>
                       )}
+                    </td>
+                  </tr>
+
+                  {/* Fila 2: Stop Loss Global cubriendo las 3 Entradas DCA (E3, E2, E1) */}
+                  <tr
+                    onClick={() => onSelectStrategy && onSelectStrategy(strat)}
+                    className="transition-colors duration-200 cursor-pointer bg-slate-950/40"
+                  >
+                    <td colSpan={3} className="py-1 px-2.5 text-center bg-rose-950/30 border-r border-slate-800 border-t border-rose-900/40 font-mono">
+                      <div className="flex items-center justify-between gap-2 px-2.5 py-1 rounded-md bg-rose-950/80 border border-rose-500/60 shadow-xs">
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                          <span className="text-[10px] font-black uppercase text-rose-300 tracking-wider">
+                            🛑 SL Global (E1..E3):
+                          </span>
+                        </div>
+                        <span className="font-mono font-black text-xs text-rose-200 bg-rose-900/90 px-2 py-0.5 rounded border border-rose-500/50 shadow-xs">
+                          {formatPrice(slPrice)}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[10px] font-mono shrink-0">
+                          <span className="font-bold text-rose-300">
+                            {slDiffPctStr}
+                          </span>
+                          {activeLoss > 0 && (
+                            <span className="text-rose-400 font-medium">
+                              (-${activeLoss.toFixed(2)})
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </td>
                   </tr>
 
@@ -806,48 +918,58 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     };
 
                     return (
-                      <tr className="bg-slate-950 border-b-2 border-slate-800">
-                        {/* Cols 1 to 7: Live Status Indicator */}
-                        <td colSpan={7} className="py-2 px-3 border-r border-slate-800 bg-slate-950/90">
-                          <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
-                            <span className={`px-2.5 py-1 rounded text-[11px] font-black uppercase tracking-wide border shadow-xs transition-colors ${
-                              isAdvancing 
-                                ? 'text-emerald-300 bg-emerald-950/70 border-emerald-600/70' 
-                                : 'text-rose-300 bg-rose-950/70 border-rose-600/70'
-                            }`}>
-                              {isAdvancing 
-                                ? (hasDcaActive ? '📈 Ganancia sobre BE Global' : '📈 Ganancia sobre Entrada 1') 
-                                : (hasDcaActive ? '📉 Por debajo de BE Global' : '📉 Por debajo de Entrada 1')}
+                      <tr 
+                        onClick={() => onSelectStrategy && onSelectStrategy(strat)}
+                        className={`transition-colors duration-200 cursor-pointer border-b-2 border-slate-800 ${
+                          operational.isTriggerZoneActive
+                            ? 'bg-cyan-950/40 hover:bg-cyan-950/60'
+                            : idx === 0 
+                            ? 'bg-amber-950/15 hover:bg-emerald-950/40' 
+                            : 'hover:bg-slate-900/80 bg-slate-950/40'
+                        }`}
+                      >
+                        {/* Cols 1 to 7: Reglas del Trading (En el espacio bajo Rank hasta Nominal) */}
+                        <td colSpan={7} className="py-2.5 px-3 border-r border-slate-800 bg-slate-950/95 font-sans border-t-0 align-middle">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/90 border border-cyan-500/60 text-cyan-300 font-mono font-black text-[10px] uppercase tracking-wider shadow-sm shrink-0">
+                              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>Reglas del Trading</span>
                             </span>
-                            <span className="text-[10px] text-slate-400 font-bold bg-slate-900 border border-slate-800 px-2 py-0.5 rounded">
-                              {hasDcaActive ? '⚖️ Medición: BE Global (E1+DCA)' : '🎯 Medición: Entrada 1 (E1)'}
+                            <span className="text-slate-200 text-xs font-semibold leading-relaxed">
+                              {strat.tacticalRules || 'Mover SL a Breakeven al alcanzar TP1. Cerrar 50% en TP1 para asegurar ganancia.'}
                             </span>
+                            {strat.tradeDiscipline && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/50 text-purple-300 text-[10px] font-mono shrink-0 shadow-xs">
+                                <span>⚡</span>
+                                <span>{strat.tradeDiscipline}</span>
+                              </span>
+                            )}
                           </div>
                         </td>
 
-                        {/* Cols 8 to 14: ONE Single Continuous Price Line with Integrated BE & Live Bars */}
-                        <td colSpan={7} className="py-2.5 px-3 border-r border-slate-800 bg-slate-950/95 font-mono">
-                          <div className="relative w-full pt-7 pb-7">
+                        {/* Cols 8 to 13: ONE Single Continuous Price Line ANCHORED to the bottom of the cells */}
+                        <td colSpan={6} className="pt-1 pb-8 px-3 border-r border-slate-800 bg-slate-950/95 font-mono border-t-0">
+                          <div className="relative w-full pt-0 pb-0">
                             {/* UNA SOLA LÍNEA DE PRECIO CONTINUA MÁS ANCHA CON LÍNEAS DE SEPARACIÓN */}
                             <div className="relative w-full h-8 rounded-full overflow-hidden flex border-2 border-slate-700/90 bg-slate-900 shadow-inner">
-                              {/* Red Segment (Stop Loss) - 1/7 con porcentaje desde BE hacia SL */}
-                              <div className="w-[14.28%] h-full bg-gradient-to-r from-rose-950 via-rose-900 to-rose-850/90 border-r border-rose-500/40 flex items-center justify-center text-[10px] font-black text-rose-200/90 tracking-tight select-none z-10">
+                              {/* Red Segment (Stop Loss) - Estrecho, alineado con columna SL */}
+                              <div className="w-11 shrink-0 h-full bg-gradient-to-r from-rose-950 via-rose-900 to-rose-850/90 border-r border-rose-500/40 flex items-center justify-center text-[9px] font-black text-rose-200/90 tracking-tighter select-none z-10">
                                 {getBeDiffPctStr(slPrice)}
                               </div>
 
-                              {/* Cyan/Blue Segments (DCA E3, E2, E1) - 3/7 con líneas de separación limpias (sin porcentajes) */}
-                              <div className="w-[14.28%] h-full bg-cyan-950/60 border-r border-cyan-500/30" />
-                              <div className="w-[14.28%] h-full bg-sky-950/60 border-r border-cyan-500/30" />
-                              <div className="w-[14.28%] h-full bg-blue-950/70 border-r border-cyan-500/50" />
+                              {/* Cyan/Blue Segments (DCA E3, E2, E1) - flex-1 con líneas de separación limpias */}
+                              <div className="flex-1 h-full bg-cyan-950/60 border-r border-cyan-500/30" />
+                              <div className="flex-1 h-full bg-sky-950/60 border-r border-cyan-500/30" />
+                              <div className="flex-1 h-full bg-blue-950/70 border-r border-cyan-500/50" />
 
-                              {/* Green Segments (Take Profit TP1, TP2, TP3) - 3/7 con porcentaje desde BE hacia cada TP */}
-                              <div className="w-[14.28%] h-full bg-emerald-950/50 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
+                              {/* Green Segments (Take Profit TP1, TP2, TP3) - flex-1 con porcentaje desde BE hacia cada TP */}
+                              <div className="flex-1 h-full bg-emerald-950/50 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
                                 {getBeDiffPctStr(tp1Data?.price)}
                               </div>
-                              <div className="w-[14.28%] h-full bg-emerald-950/70 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
+                              <div className="flex-1 h-full bg-emerald-950/70 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
                                 {getBeDiffPctStr(tp2Data?.price)}
                               </div>
-                              <div className="w-[14.32%] h-full bg-emerald-900/80 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
+                              <div className="flex-1 h-full bg-emerald-900/80 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
                                 {getBeDiffPctStr(tp3Data?.price)}
                               </div>
 
@@ -880,49 +1002,32 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               )}
                             </div>
 
-                            {/* LÍNEA DE REFERENCIA DE ENTRADA (E1 o BE Global) */}
+                            {/* LÍNEA DE REFERENCIA DE ENTRADA (E1 o BE Global) SIN ETIQUETA DE PNL */}
                             {refEntryPrice > 0 && (
                               <div 
-                                className="absolute bottom-7 top-auto -translate-x-1/2 z-25 flex flex-col items-center justify-center pointer-events-none whitespace-nowrap h-8"
+                                className="absolute top-0 bottom-0 -translate-x-1/2 z-25 flex items-center justify-center pointer-events-none h-8"
                                 style={{ left: `${refEntryPosPct}%` }}
                               >
                                 {/* Línea divisoria vertical a toda la altura de la barra */}
-                                <div className={`w-[2px] h-8 ${hasDcaActive ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.9)]' : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]'}`} />
-
-                                {/* Etiqueta flotante de precio de Entrada / BE posicionada de forma absoluta ABAJO de la barra */}
-                                <div className={`absolute top-full mt-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-xl border backdrop-blur-md ${
-                                  hasDcaActive 
-                                    ? 'border-amber-500/80 bg-slate-950/95 text-amber-300' 
-                                    : 'border-cyan-500/80 bg-slate-950/95 text-cyan-300'
-                                }`}>
-                                  <span className={`w-1.5 h-1.5 rounded-full ${hasDcaActive ? 'bg-amber-400' : 'bg-cyan-400'}`} />
-                                  <span>{hasDcaActive ? `BE: ${formatPrice(refEntryPrice)}` : `E1: ${formatPrice(refEntryPrice)}`}</span>
-                                </div>
+                                <div className={`w-[2.5px] h-8 ${hasDcaActive ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.9)]' : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]'}`} />
                               </div>
                             )}
 
-                            {/* Etiqueta flotante de precio LIVE y dirección posicionada sobre el límite de llenado de la barra */}
+                            {/* Etiqueta flotante de precio LIVE y dirección posicionada sobre el límite de llenado de la barra (DEBAJO de la barra para no tapar celdas) */}
                             <div 
-                              className="absolute bottom-7 top-auto -translate-x-1/2 transition-all duration-300 z-30 flex items-center justify-center pointer-events-none whitespace-nowrap h-8"
-                              style={{ left: `${posPct}%` }}
+                              className="absolute top-0 bottom-0 -translate-x-1/2 transition-all duration-300 z-30 flex items-center justify-center pointer-events-none whitespace-nowrap h-8"
+                              style={{ left: `${Math.max(10, Math.min(90, posPct))}%` }}
                             >
-                              {/* Etiqueta flotante de precio LIVE, PNL y dirección posicionada de forma absoluta ARRIBA de la barra */}
-                              <div className={`absolute bottom-full mb-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-xl border backdrop-blur-md transition-all ${
+                              {/* Etiqueta flotante de precio LIVE y dirección posicionada de forma absoluta DEBAJO de la barra */}
+                              <div className={`absolute top-full mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-xl border backdrop-blur-md transition-all ${
                                 isAdvancing
                                   ? 'bg-slate-950/95 text-emerald-300 border-emerald-400 shadow-emerald-500/40 ring-1 ring-emerald-500/40'
                                   : 'bg-slate-950/95 text-rose-300 border-rose-400 shadow-rose-500/40 ring-1 ring-rose-500/40'
                               }`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${isAdvancing ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`} />
                                 <span>LIVE: {formatPrice(currentPrice)}</span>
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-black ${
-                                  livePnlUsd >= 0 
-                                    ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-xs' 
-                                    : 'bg-rose-950/90 text-rose-300 border border-rose-500/60 shadow-xs'
-                                }`}>
-                                  PNL: {livePnlUsd >= 0 ? '+' : ''}${livePnlUsd.toFixed(2)}
-                                </span>
                                 <span className="font-extrabold text-[9px]">
-                                  {isAdvancing ? '►►' : '◄◄'} ({isAdvancing ? '+' : ''}{liveVsEntryPct.toFixed(1)}%)
+                                  {isAdvancing ? '►►' : '◄◄'}
                                 </span>
                               </div>
                             </div>
