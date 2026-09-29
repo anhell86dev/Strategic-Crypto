@@ -25,6 +25,89 @@ const SHEET_NAME_CANDIDATES = [
   'Hoja 1'
 ];
 
+// Lista oficial de estrategias ACTIVAS según la Hoja: Estrategia, Columna M (Estado === 'Activa')
+export const KNOWN_ACTIVE_ESTRATEGIA_NAMES: string[] = [
+  "AAVE_PULLBACK_26-09-26_06:39",
+  "APT_PULLBACK_26-09-26_00:19",
+  "ATOM_PULLBACK_26-09-26_17:56",
+  "FET_PULLBACK_25-09-26_04:55",
+  "PENDLE_PULLBACK_26-09-26_07:00",
+  "PENGU_RANGO_26-09-26_18:31",
+  "PI_REBOTE_26-09-26_06:28",
+  "PIEVERSE_PULLBACK_26-09-26_18:17",
+  "POL_PULLBACK_25-09-26_18:23",
+  "QNT_PULLBACK_26-09-26_17:33",
+  "SEI_PULLBACK_26-09-26_11:39",
+  "INJ_PULLBACK_26-09-26_18:26",
+  "KAS_PULLBACK_26-09-26_00:12",
+  "NEAR_PULLBACK_25-09-26_22:54",
+  "NEXO_ACUMULACION_26-09-26_00:55",
+  "U_RANGO_25-09-26_05:18",
+  "USDE_PULLBACK_26-09-26_05:35",
+  "ZRO_PULLBACK_25-09-26_18:03",
+  "BGB_RANGO_26-09-26_23:22",
+  "CRO_PULLBACK_27-09-26_05:08",
+  "ENA_PULLBACK_27-09-26_05:20",
+  "MNT_PULLBACK_27-09-26_05:16",
+  "ONDO_PULLBACK_27-09-26_05:23",
+  "PONS_RANGO_26-09-26_23:46",
+  "PUMP_ACUMULACION_27-09-26_05:30",
+  "VIRTUAL_PULLBACK_27-09-26_05:12",
+  "VVV_HOLD_27-09-26_05:12",
+  "PEPE_RANGO_27-09-26_05:29",
+  "VET_RANGO_27-09-26_05:25",
+  "CAKE_RANGO_26-09-26_23:42",
+  "TRUMP_RANGO_26-09-26_23:46",
+  "WLFI_RANGO_26-09-26_23:29",
+  "STABLE_RANGO_27-09-26_05:02",
+  "ADA_RANGO_28-09-26_10:30",
+  "AERO_RANGO_28-09-26_05:22",
+  "ALGO_PULLBACK_28-09-26_05:00",
+  "AVAX_PULLBACK_28-09-26_11:11",
+  "BCH_PULLBACK_28-09-26_10:43",
+  "BNB_RANGO_28-09-26_16:12",
+  "BSV_RANGO_28-09-26_05:34",
+  "BTC_RANGO_28-09-26_10:03",
+  "CC_RANGO_28-09-26_11:05",
+  "CRV_ACUMULACION_28-09-26_05:35",
+  "DASH_PULLBACK_28-09-26_05:22",
+  "DOGE_RANGO_28-09-26_16:23",
+  "ETH_ACUMULACION_28-09-26_16:05",
+  "ETHFI_ACUMULACION_28-09-26_05:25",
+  "FIL_PULLBACK_28-09-26_05:30",
+  "GRAM_PULLBACK_28-09-26_11:15",
+  "HBAR_PULLBACK_28-09-26_11:00",
+  "HYPE_RANGO_28-09-26_16:19",
+  "ICP_RANGO_28-09-26_05:41",
+  "JST_PULLBACK_28-09-26_05:07",
+  "JUP_RANGO_27-09-26_23:27",
+  "LEO_RANGO_28-09-26_04:30",
+  "LINK_PULLBACK_28-09-26_16:24",
+  "LIT_PULLBACK_27-09-26_23:52",
+  "LTC_PULLBACK_28-09-26_04:44",
+  "MORPHO_RANGO_28-09-26_05:27",
+  "NIGHT_PULLBACK_28-09-26_05:13",
+  "PYTH_RANGO_27-09-26_23:37",
+  "RAY_ACUMULACION_28-09-26_05:12",
+  "RENDER_CONSOLIDACION_28-09-26_05:45",
+  "SHIB_RANGO_28-09-26_04:54",
+  "SOL_ACUMULACION_28-09-26_10:16",
+  "STX_RANGO_28-09-26_05:27",
+  "SUI_RANGO_28-09-26_11:10",
+  "TAO_PULLBACK_28-09-26_04:51",
+  "TRX_RANGO_28-09-26_16:14",
+  "UNI_PULLBACK_28-09-26_17:08",
+  "WLD_RANGO_28-09-26_05:25",
+  "XLM_PULLBACK_28-09-26_10:35",
+  "XMR_RANGO_28-09-26_10:32",
+  "XRP_ACUMULACION_28-09-26_10:06",
+  "ZEC_PULLBACK_28-09-26_10:21",
+  "XDC_HOLD_28-09-26_04:56",
+  "ARB_RANGO_28-09-26_05:16",
+  "SKY_PULLBACK_28-09-26_05:04",
+  "TIA_RANGO_28-09-26_05:40"
+];
+
 export class SheetsService {
   public static getConfig(): SheetsConfig {
     try {
@@ -55,12 +138,19 @@ export class SheetsService {
       const ordData = localStorage.getItem(STORAGE_KEY_CUSTOM_ORDERS);
       if (strData) {
         const parsedStr = JSON.parse(strData);
-        if (Array.isArray(parsedStr) && parsedStr.length >= 70) {
-          const hasValidData = parsedStr.some(s => s.strategyName && s.entryPrice > 0);
-          if (hasValidData) {
+        if (Array.isArray(parsedStr) && parsedStr.length > 0) {
+          const knownActiveSet = new Set(KNOWN_ACTIVE_ESTRATEGIA_NAMES.map(n => n.toLowerCase().trim()));
+          const activeStrats = parsedStr.filter((s: Strategy) => {
+            const k = (s.strategyName || '').toLowerCase().trim();
+            return knownActiveSet.has(k);
+          });
+          if (activeStrats.length > 0) {
+            const activeIds = new Set(activeStrats.map(s => s.id));
+            const allOrders: TakeProfitOrder[] = ordData ? JSON.parse(ordData) : INITIAL_ORDERS;
+            const activeOrders = allOrders.filter(o => activeIds.has(o.strategyId));
             return {
-              strategies: parsedStr,
-              orders: ordData ? JSON.parse(ordData) : []
+              strategies: activeStrats,
+              orders: activeOrders
             };
           }
         }
@@ -81,6 +171,97 @@ export class SheetsService {
   }
 
   /**
+   * Fetches sheet 'Estrategia' to read Column M (Col 12: Estado).
+   * Returns a set of strategy names (in lowercase) that are marked 'Activa' (not 'Inactiva').
+   */
+  public static async fetchEstrategiaActiveSet(spreadsheetId: string, apiKey?: string): Promise<Set<string>> {
+    const activeSet = new Set<string>();
+
+    // 1. Try GViz CSV export for sheet 'Estrategia'
+    if (spreadsheetId) {
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Estrategia')}&t=${Date.now()}`;
+      try {
+        const res = await fetch(csvUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'text/csv, text/plain, */*' }
+        });
+        if (res.ok) {
+          const csvText = await res.text();
+          if (csvText && !csvText.includes('<!DOCTYPE html>') && csvText.trim().length > 50) {
+            const rows = this.parseCsvToRows(csvText);
+            if (rows.length > 1) {
+              const header = rows[0].map(h => (h || '').toLowerCase().trim());
+              let colName = 0;
+              let colStatus = 12; // Column M is 12 (0-indexed)
+              header.forEach((h, idx) => {
+                if (/nombre.*estrategia/i.test(h)) colName = idx;
+                else if (/^estado$/i.test(h)) colStatus = idx;
+              });
+
+              for (let i = 1; i < rows.length; i++) {
+                const r = rows[i];
+                if (!r || r.length <= colName) continue;
+                const name = (r[colName] || r[0] || '').trim().toLowerCase();
+                const status = (r[colStatus] || (r.length > 12 ? r[12] : '') || '').trim().toLowerCase();
+                if (name && status.includes('activa') && !status.includes('inactiva')) {
+                  activeSet.add(name);
+                }
+              }
+
+              if (activeSet.size > 0) {
+                return activeSet;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Error fetching Estrategia sheet via CSV:', e);
+      }
+    }
+
+    // 2. Try REST API if apiKey available
+    if (spreadsheetId && apiKey) {
+      try {
+        const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Estrategia?key=${apiKey}&t=${Date.now()}`;
+        const res = await fetch(apiUrl);
+        if (res.ok) {
+          const json = await res.json();
+          const rows: string[][] = json.values || [];
+          if (rows.length > 1) {
+            const header = rows[0].map(h => (h || '').toLowerCase().trim());
+            let colName = 0;
+            let colStatus = 12;
+            header.forEach((h, idx) => {
+              if (/nombre.*estrategia/i.test(h)) colName = idx;
+              else if (/^estado$/i.test(h)) colStatus = idx;
+            });
+
+            for (let i = 1; i < rows.length; i++) {
+              const r = rows[i];
+              if (!r || r.length <= colName) continue;
+              const name = (r[colName] || r[0] || '').trim().toLowerCase();
+              const status = (r[colStatus] || (r.length > 12 ? r[12] : '') || '').trim().toLowerCase();
+              if (name && status.includes('activa') && !status.includes('inactiva')) {
+                activeSet.add(name);
+              }
+            }
+
+            if (activeSet.size > 0) {
+              return activeSet;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Error fetching Estrategia sheet via API:', e);
+      }
+    }
+
+    // 3. Fallback: Use known active strategy names from sheet Estrategia Col M
+    KNOWN_ACTIVE_ESTRATEGIA_NAMES.forEach(n => activeSet.add(n.toLowerCase().trim()));
+    return activeSet;
+  }
+
+  /**
    * Fetches strategies & orders from Google Sheets GViz CSV export, REST API, or proxy.
    */
   public static async fetchFromGoogleSheets(config: SheetsConfig): Promise<{
@@ -95,6 +276,9 @@ export class SheetsService {
       : proxyService.getSheetsApiKey();
 
     const timestamp = new Date();
+
+    // Consultar primero el estado de las estrategias en la Hoja: Estrategia, Columna M
+    const activeStrategySet = await this.fetchEstrategiaActiveSet(spreadsheetId, effectiveApiKey);
 
     // METHOD 1: Direct Google Sheets GViz CSV Export (tab Ordenes)
     if (spreadsheetId) {
@@ -116,8 +300,8 @@ export class SheetsService {
             if (csvText && !csvText.includes('<!DOCTYPE html>') && csvText.trim().length > 100) {
               const rows = this.parseCsvToRows(csvText);
               if (rows.length > 1) {
-                const parsedResult = this.parseStrategiesSheetRows(rows);
-                if (parsedResult.strategies.length >= 70) {
+                const parsedResult = this.parseStrategiesSheetRows(rows, activeStrategySet);
+                if (parsedResult.strategies.length > 0) {
                   this.saveCustomData(parsedResult.strategies, parsedResult.orders);
                   return {
                     strategies: parsedResult.strategies,
@@ -148,7 +332,7 @@ export class SheetsService {
             const values = stratJson.values || [];
             
             if (values.length > 1) {
-              const parsedResult = this.parseStrategiesSheetRows(values);
+              const parsedResult = this.parseStrategiesSheetRows(values, activeStrategySet);
               if (parsedResult.strategies.length > 0) {
                 this.saveCustomData(parsedResult.strategies, parsedResult.orders);
                 return {
@@ -276,7 +460,7 @@ export class SheetsService {
    * Col 38: Disciplina del Trade
    * Col 39: Estado
    */
-  public static parseStrategiesSheetRows(rows: string[][]): {
+  public static parseStrategiesSheetRows(rows: string[][], activeStrategySet?: Set<string>): {
     strategies: Strategy[];
     orders: TakeProfitOrder[];
   } {
@@ -391,6 +575,17 @@ export class SheetsService {
       if (!stratName && !rawAsset) return;
       if (stratName.toLowerCase().includes('nombre estrategia') || rawAsset === 'ACTIVO') return;
 
+      // FILTRAR ESTRICTAMENTE: Solo estrategias ACTIVAS según la Hoja: Estrategia, Columna M
+      if (activeStrategySet && activeStrategySet.size > 0) {
+        const normName = stratName.toLowerCase().trim();
+        const normAsset = rawAsset.toLowerCase().trim();
+        const isActive = activeStrategySet.has(normName) ||
+          Array.from(activeStrategySet).some(a => normName === a || normName.startsWith(a) || a.startsWith(normName) || a.startsWith(normAsset + '_'));
+        if (!isActive) {
+          return; // Omitir estrategia inactiva según Hoja Estrategia, Columna M
+        }
+      }
+
       const symbol = rawAsset.endsWith('USDT') ? rawAsset : `${rawAsset}USDT`;
       const id = index + 1;
       const rawType = (row[colType] || 'Long').toString().toUpperCase();
@@ -503,7 +698,8 @@ export class SheetsService {
         lossCapa3,
         tacticalRules,
         tradeDiscipline,
-        status,
+        status: 'Active',
+        statusSheetEstrategia: 'Activa',
         rowIndex: index + 1 // Row 1 is header, data rows start at 2
       });
 

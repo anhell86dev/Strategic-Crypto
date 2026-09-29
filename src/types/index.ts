@@ -64,6 +64,7 @@ export interface Strategy {
   tacticalRules?: string; // Col AL: Reglas de Ejecución Táctica (e.g. "Mover SL a Breakeven al tocar TP1...")
   tradeDiscipline?: string; // Col AM: Disciplina del Trade (e.g. "No promediar por debajo de E3...")
   status: 'Active' | 'Pending' | 'Completed' | 'Invalidado' | 'ACTIVA' | 'INVALIDADO TARDE' | string; // Col AN: Estado
+  statusSheetEstrategia?: string; // Col M en Hoja Estrategia (e.g. "Activa")
   rowIndex?: number; // Fila exacta en Google Sheets (e.g. 2, 3, 4...)
 
   customAlertThreshold?: number; // e.g. 1.0%
