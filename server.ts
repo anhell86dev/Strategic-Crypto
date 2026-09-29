@@ -624,6 +624,97 @@ app.delete('/api/binance/futures/order', async (req: Request, res: Response) => 
   }
 });
 
+// 10. GET /api/sheets/live-data - Direct backend proxy to Google Sheets to eliminate CORS and stale caches
+app.get('/api/sheets/live-data', async (req: Request, res: Response) => {
+  const spreadsheetId = (req.query.spreadsheetId as string || '1jwRLOHKGUlHSPcAF401LKtDtSW5erFwZvxYkSJm-2mE').trim();
+  const apiKey = (req.query.apiKey as string || '').trim();
+  const cacheBuster = `_t=${Date.now()}_${Math.random()}`;
+
+  let ordenesCsv: string | null = null;
+  let estrategiaCsv: string | null = null;
+  let values: any[][] | null = null;
+  let source = 'unknown';
+
+  // 1. Fetch Estrategia sheet (to know currently active strategy names in Col M)
+  try {
+    const estUrls = [
+      `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Estrategia')}&${cacheBuster}`,
+      `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Estrategias')}&${cacheBuster}`
+    ];
+    for (const u of estUrls) {
+      const resp = await fetch(u, {
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+      });
+      if (resp.ok) {
+        const txt = await resp.text();
+        if (txt && !txt.includes('<!DOCTYPE html>') && txt.length > 50) {
+          estrategiaCsv = txt;
+          break;
+        }
+      }
+    }
+  } catch (e: any) {
+    console.warn('[Server Sheets Proxy] Warning fetching Estrategia tab:', e.message);
+  }
+
+  // 2. Fetch Ordenes sheet via CSV
+  try {
+    const ordUrls = [
+      `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Ordenes')}&${cacheBuster}`,
+      `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Órdenes')}&${cacheBuster}`,
+      `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=0&${cacheBuster}`
+    ];
+    for (const u of ordUrls) {
+      const resp = await fetch(u, {
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+      });
+      if (resp.ok) {
+        const txt = await resp.text();
+        if (txt && !txt.includes('<!DOCTYPE html>') && txt.length > 100) {
+          ordenesCsv = txt;
+          source = 'server_gviz_csv';
+          break;
+        }
+      }
+    }
+  } catch (e: any) {
+    console.warn('[Server Sheets Proxy] Warning fetching Ordenes CSV:', e.message);
+  }
+
+  // 3. If CSV failed or if apiKey is provided, try Google Sheets REST API
+  if ((!ordenesCsv || apiKey) && apiKey) {
+    try {
+      const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Ordenes?key=${apiKey}&${cacheBuster}`;
+      const apiResp = await fetch(apiUrl);
+      if (apiResp.ok) {
+        const json = await apiResp.json();
+        if (json.values && json.values.length > 1) {
+          values = json.values;
+          source = 'server_rest_api';
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Server Sheets Proxy] Warning fetching via REST API:', e.message);
+    }
+  }
+
+  if (ordenesCsv || values) {
+    return res.json({
+      ok: true,
+      source,
+      ordenesCsv,
+      estrategiaCsv,
+      values,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  return res.status(502).json({
+    ok: false,
+    error: 'No se pudo obtener datos en vivo de Google Sheets desde el servidor'
+  });
+});
+
 // Setup dev server with Vite middlewares or production static files
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';

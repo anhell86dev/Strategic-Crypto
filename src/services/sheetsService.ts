@@ -139,20 +139,11 @@ export class SheetsService {
       if (strData) {
         const parsedStr = JSON.parse(strData);
         if (Array.isArray(parsedStr) && parsedStr.length > 0) {
-          const knownActiveSet = new Set(KNOWN_ACTIVE_ESTRATEGIA_NAMES.map(n => n.toLowerCase().trim()));
-          const activeStrats = parsedStr.filter((s: Strategy) => {
-            const k = (s.strategyName || '').toLowerCase().trim();
-            return knownActiveSet.has(k);
-          });
-          if (activeStrats.length > 0) {
-            const activeIds = new Set(activeStrats.map(s => s.id));
-            const allOrders: TakeProfitOrder[] = ordData ? JSON.parse(ordData) : INITIAL_ORDERS;
-            const activeOrders = allOrders.filter(o => activeIds.has(o.strategyId));
-            return {
-              strategies: activeStrats,
-              orders: activeOrders
-            };
-          }
+          const parsedOrd: TakeProfitOrder[] = ordData ? JSON.parse(ordData) : [];
+          return {
+            strategies: parsedStr,
+            orders: parsedOrd
+          };
         }
       }
     } catch (e) {
@@ -184,11 +175,42 @@ export class SheetsService {
   }
 
   /**
+   * Parses active strategy names from 'Estrategia' CSV text
+   */
+  public static parseActiveSetFromEstrategiaCsv(csvText: string): Set<string> {
+    const activeSet = new Set<string>();
+    if (!csvText || csvText.includes('<!DOCTYPE html>') || csvText.trim().length < 20) {
+      return activeSet;
+    }
+    const rows = this.parseCsvToRows(csvText);
+    if (rows.length <= 1) return activeSet;
+
+    const header = rows[0].map(h => (h || '').toLowerCase().trim());
+    let colName = 0;
+    let colStatus = 12; // Column M is 12 (0-indexed)
+    header.forEach((h, idx) => {
+      if (/nombre.*estrategia/i.test(h)) colName = idx;
+      else if (/^estado$/i.test(h)) colStatus = idx;
+    });
+
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r || r.length <= colName) continue;
+      const name = (r[colName] || r[0] || '').trim().toLowerCase();
+      const status = (r[colStatus] || (r.length > 12 ? r[12] : '') || '').trim().toLowerCase();
+      // Only add if explicitly active and NOT inactiva/retirada/cerrada/pasada
+      if (name && status.includes('activa') && !status.includes('inactiva') && !status.includes('retirada') && !status.includes('cerrada') && !status.includes('pasada')) {
+        activeSet.add(name);
+      }
+    }
+    return activeSet;
+  }
+
+  /**
    * Fetches sheet 'Estrategia' to read Column M (Col 12: Estado).
    * Returns a set of strategy names (in lowercase) that are marked 'Activa' (not 'Inactiva').
    */
   public static async fetchEstrategiaActiveSet(spreadsheetId: string, apiKey?: string, forcePurgeCache: boolean = false): Promise<Set<string>> {
-    const activeSet = new Set<string>();
     const cacheBuster = `_cb=${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 
     // 1. Try GViz CSV export for sheet 'Estrategia'
@@ -205,32 +227,8 @@ export class SheetsService {
         });
         if (res.ok) {
           const csvText = await res.text();
-          if (csvText && !csvText.includes('<!DOCTYPE html>') && csvText.trim().length > 50) {
-            const rows = this.parseCsvToRows(csvText);
-            if (rows.length > 1) {
-              const header = rows[0].map(h => (h || '').toLowerCase().trim());
-              let colName = 0;
-              let colStatus = 12; // Column M is 12 (0-indexed)
-              header.forEach((h, idx) => {
-                if (/nombre.*estrategia/i.test(h)) colName = idx;
-                else if (/^estado$/i.test(h)) colStatus = idx;
-              });
-
-              for (let i = 1; i < rows.length; i++) {
-                const r = rows[i];
-                if (!r || r.length <= colName) continue;
-                const name = (r[colName] || r[0] || '').trim().toLowerCase();
-                const status = (r[colStatus] || (r.length > 12 ? r[12] : '') || '').trim().toLowerCase();
-                if (name && status.includes('activa') && !status.includes('inactiva')) {
-                  activeSet.add(name);
-                }
-              }
-
-              if (activeSet.size > 0) {
-                return activeSet;
-              }
-            }
-          }
+          const parsed = this.parseActiveSetFromEstrategiaCsv(csvText);
+          if (parsed.size > 0) return parsed;
         }
       } catch (e) {
         console.warn('Error fetching Estrategia sheet via CSV:', e);
@@ -249,6 +247,7 @@ export class SheetsService {
           const json = await res.json();
           const rows: string[][] = json.values || [];
           if (rows.length > 1) {
+            const activeSet = new Set<string>();
             const header = rows[0].map(h => (h || '').toLowerCase().trim());
             let colName = 0;
             let colStatus = 12;
@@ -262,7 +261,7 @@ export class SheetsService {
               if (!r || r.length <= colName) continue;
               const name = (r[colName] || r[0] || '').trim().toLowerCase();
               const status = (r[colStatus] || (r.length > 12 ? r[12] : '') || '').trim().toLowerCase();
-              if (name && status.includes('activa') && !status.includes('inactiva')) {
+              if (name && status.includes('activa') && !status.includes('inactiva') && !status.includes('retirada') && !status.includes('cerrada')) {
                 activeSet.add(name);
               }
             }
@@ -277,9 +276,7 @@ export class SheetsService {
       }
     }
 
-    // 3. Fallback: Use known active strategy names from sheet Estrategia Col M
-    KNOWN_ACTIVE_ESTRATEGIA_NAMES.forEach(n => activeSet.add(n.toLowerCase().trim()));
-    return activeSet;
+    return new Set<string>();
   }
 
   /**
@@ -305,6 +302,46 @@ export class SheetsService {
     }
 
     const cacheBuster = `_cb=${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+
+    // METHOD 0: Servidor Express Backend Proxy Directo (Elimina CORS y restricciones de navegador)
+    try {
+      const serverProxyUrl = `/api/sheets/live-data?spreadsheetId=${encodeURIComponent(spreadsheetId)}&apiKey=${encodeURIComponent(effectiveApiKey || '')}&${cacheBuster}`;
+      const serverResp = await fetch(serverProxyUrl, {
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+      });
+      if (serverResp.ok) {
+        const serverData = await serverResp.json();
+        if (serverData.ok) {
+          // Extraer conjunto activo de la hoja Estrategia si vino
+          let activeSet: Set<string> | undefined = undefined;
+          if (serverData.estrategiaCsv) {
+            activeSet = this.parseActiveSetFromEstrategiaCsv(serverData.estrategiaCsv);
+          }
+
+          let parsedResult: { strategies: Strategy[]; orders: TakeProfitOrder[] } | null = null;
+          if (serverData.ordenesCsv) {
+            const rows = this.parseCsvToRows(serverData.ordenesCsv);
+            if (rows.length > 1) {
+              parsedResult = this.parseStrategiesSheetRows(rows, activeSet);
+            }
+          } else if (serverData.values && Array.isArray(serverData.values) && serverData.values.length > 1) {
+            parsedResult = this.parseStrategiesSheetRows(serverData.values, activeSet);
+          }
+
+          if (parsedResult && parsedResult.strategies.length > 0) {
+            this.saveCustomData(parsedResult.strategies, parsedResult.orders);
+            return {
+              strategies: parsedResult.strategies,
+              orders: parsedResult.orders,
+              source: 'google_sheets_csv',
+              timestamp
+            };
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('[SheetsService] Server proxy live-data aviso:', e.message);
+    }
 
     // Consultar primero el estado de las estrategias en la Hoja: Estrategia, Columna M
     const activeStrategySet = await this.fetchEstrategiaActiveSet(spreadsheetId, effectiveApiKey, forcePurgeCache);
@@ -383,7 +420,7 @@ export class SheetsService {
       }
     }
 
-    // METHOD 3: Fallback to stored or initial strategies
+    // METHOD 3: Fallback to stored custom strategies
     const stored = this.getStoredCustomData();
     return {
       strategies: stored.strategies.length > 0 ? stored.strategies : INITIAL_STRATEGIES,
@@ -608,6 +645,14 @@ export class SheetsService {
       if (!stratName && !rawAsset) return;
       if (stratName.toLowerCase().includes('nombre estrategia') || rawAsset === 'ACTIVO') return;
 
+      // Extraer y validar Estado directo de la fila de la hoja Ordenes
+      const rowStatusRaw = (row[colStatus] || '').toString().trim().toLowerCase();
+      
+      // Si la fila está marcada explícitamente como inactiva, retirada, cerrada, pasada, cancelada, etc.:
+      if (/inactiv|retirad|cerrad|pasad|finaliz|cancel|pausad|eliminad|histor/i.test(rowStatusRaw)) {
+        return; // Omitir estrategia retirada / pasada / inactiva
+      }
+
       // FILTRAR ESTRICTAMENTE: Solo estrategias ACTIVAS según la Hoja: Estrategia, Columna M
       if (activeStrategySet && activeStrategySet.size > 0) {
         const normName = stratName.toLowerCase().trim();
@@ -731,8 +776,8 @@ export class SheetsService {
         lossCapa3,
         tacticalRules,
         tradeDiscipline,
-        status: 'Active',
-        statusSheetEstrategia: 'Activa',
+        status: (row[colStatus] || 'Activa').toString().trim() || 'Activa',
+        statusSheetEstrategia: (row[colStatus] || 'Activa').toString().trim() || 'Activa',
         rowIndex: index + 1 // Row 1 is header, data rows start at 2
       });
 
