@@ -191,11 +191,13 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onManualSync}
               disabled={isSyncing}
-              title="Forzar sincronización con Google Sheets"
+              title="Depurar caché y forzar actualización limpia desde Google Docs"
               className="flex items-center gap-2 px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-200 hover:text-white hover:bg-slate-800 rounded-lg transition-all disabled:opacity-50 cursor-pointer"
             >
               <RotateCw className={`w-4 h-4 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Actualizar Docs</span>
+              <span className="hidden sm:inline">
+                {isSyncing ? 'Depurando Docs...' : 'Actualizar Docs'}
+              </span>
             </button>
             <div className="px-2.5 text-xs text-slate-400 font-mono border-l border-slate-800 hidden md:block">
               {formatTime(lastSyncTime)}

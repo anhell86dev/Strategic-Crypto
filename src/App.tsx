@@ -67,16 +67,26 @@ export default function App() {
   // Trade History Log State
   const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>(() => TradeLogService.getLogs());
 
-  // Initial Sync from Google Sheets / Storage
-  const loadStrategiesData = useCallback(async (cfg: SheetsConfig) => {
+  // Notificación de depuración de caché
+  const [purgeNotice, setPurgeNotice] = useState<{ message: string; count: number } | null>(null);
+
+  // Initial / Manual Sync from Google Sheets / Storage with Cache Purging option
+  const loadStrategiesData = useCallback(async (cfg: SheetsConfig, forcePurgeCache: boolean = false) => {
     setIsSyncing(true);
     setSheetsStatus('connecting');
     try {
-      const res = await SheetsService.fetchFromGoogleSheets(cfg);
+      const res = await SheetsService.fetchFromGoogleSheets(cfg, forcePurgeCache);
       setStrategies(res.strategies);
       setOrders(res.orders);
       setLastSyncTime(res.timestamp);
       setSheetsStatus('connected');
+      if (forcePurgeCache) {
+        setPurgeNotice({
+          message: 'Caché depurada y eliminada con éxito.',
+          count: res.strategies.length
+        });
+        setTimeout(() => setPurgeNotice(null), 5000);
+      }
     } catch (err) {
       console.error('Error fetching sheets data:', err);
       setSheetsStatus('error');
@@ -486,7 +496,7 @@ export default function App() {
         binanceStatus={binanceStatus}
         lastSyncTime={lastSyncTime}
         isSyncing={isSyncing}
-        onManualSync={() => loadStrategiesData(sheetsConfig)}
+        onManualSync={() => loadStrategiesData(sheetsConfig, true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAddStrategy={() => setIsAddModalOpen(true)}
         soundEnabled={soundEnabled}
@@ -496,6 +506,30 @@ export default function App() {
         onTabChange={setActiveMainTab}
         onOpenGateway={() => setShowGateway(true)}
       />
+
+      {/* Notificación Flotante de Depuración de Caché */}
+      {purgeNotice && (
+        <div className="fixed top-20 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900/95 border-2 border-cyan-400 shadow-2xl backdrop-blur-xl text-slate-100 animate-in fade-in slide-in-from-top-4 duration-300 ring-2 ring-cyan-500/30">
+          <div className="w-9 h-9 rounded-xl bg-cyan-950 border border-cyan-400/80 flex items-center justify-center text-lg text-cyan-300 shadow-inner">
+            🧹
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs font-black text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+              <span>¡Caché Depurada con Éxito!</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            </span>
+            <span className="text-[11px] text-slate-300 font-medium">
+              Se han sincronizado en vivo <strong className="text-emerald-300 font-bold">{purgeNotice.count} estrategias activas</strong> desde Google Docs.
+            </span>
+          </div>
+          <button 
+            onClick={() => setPurgeNotice(null)} 
+            className="ml-3 text-slate-400 hover:text-white text-xs font-bold px-2 py-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* 2. Main Body Container */}
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-5">

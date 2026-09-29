@@ -171,19 +171,37 @@ export class SheetsService {
   }
 
   /**
+   * Depura y elimina por completo la caché de estrategias y órdenes de localStorage.
+   */
+  public static clearCache(): void {
+    try {
+      localStorage.removeItem(STORAGE_KEY_CUSTOM_STRATEGIES);
+      localStorage.removeItem(STORAGE_KEY_CUSTOM_ORDERS);
+      console.log('🧹 [SheetsService] Caché local de estrategias y órdenes depurada y eliminada con éxito.');
+    } catch (e) {
+      console.warn('Error al depurar caché:', e);
+    }
+  }
+
+  /**
    * Fetches sheet 'Estrategia' to read Column M (Col 12: Estado).
    * Returns a set of strategy names (in lowercase) that are marked 'Activa' (not 'Inactiva').
    */
-  public static async fetchEstrategiaActiveSet(spreadsheetId: string, apiKey?: string): Promise<Set<string>> {
+  public static async fetchEstrategiaActiveSet(spreadsheetId: string, apiKey?: string, forcePurgeCache: boolean = false): Promise<Set<string>> {
     const activeSet = new Set<string>();
+    const cacheBuster = `_cb=${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 
     // 1. Try GViz CSV export for sheet 'Estrategia'
     if (spreadsheetId) {
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Estrategia')}&t=${Date.now()}`;
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Estrategia')}&${cacheBuster}`;
       try {
         const res = await fetch(csvUrl, {
           method: 'GET',
-          headers: { 'Accept': 'text/csv, text/plain, */*' }
+          cache: forcePurgeCache ? 'no-store' : 'default',
+          headers: { 
+            'Accept': 'text/csv, text/plain, */*',
+            ...(forcePurgeCache ? { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' } : {})
+          }
         });
         if (res.ok) {
           const csvText = await res.text();
@@ -222,8 +240,11 @@ export class SheetsService {
     // 2. Try REST API if apiKey available
     if (spreadsheetId && apiKey) {
       try {
-        const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Estrategia?key=${apiKey}&t=${Date.now()}`;
-        const res = await fetch(apiUrl);
+        const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Estrategia?key=${apiKey}&${cacheBuster}`;
+        const res = await fetch(apiUrl, {
+          cache: forcePurgeCache ? 'no-store' : 'default',
+          headers: forcePurgeCache ? { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' } : {}
+        });
         if (res.ok) {
           const json = await res.json();
           const rows: string[][] = json.values || [];
@@ -263,8 +284,9 @@ export class SheetsService {
 
   /**
    * Fetches strategies & orders from Google Sheets GViz CSV export, REST API, or proxy.
+   * Si forcePurgeCache es true, depura y borra la caché local y fuerza peticiones sin caché HTTP.
    */
-  public static async fetchFromGoogleSheets(config: SheetsConfig): Promise<{
+  public static async fetchFromGoogleSheets(config: SheetsConfig, forcePurgeCache: boolean = false): Promise<{
     strategies: Strategy[];
     orders: TakeProfitOrder[];
     source: 'google_sheets_api' | 'google_apps_script_proxy' | 'google_sheets_csv' | 'local_preset';
@@ -277,22 +299,33 @@ export class SheetsService {
 
     const timestamp = new Date();
 
+    // Depuración de caché local si se solicita
+    if (forcePurgeCache) {
+      this.clearCache();
+    }
+
+    const cacheBuster = `_cb=${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+
     // Consultar primero el estado de las estrategias en la Hoja: Estrategia, Columna M
-    const activeStrategySet = await this.fetchEstrategiaActiveSet(spreadsheetId, effectiveApiKey);
+    const activeStrategySet = await this.fetchEstrategiaActiveSet(spreadsheetId, effectiveApiKey, forcePurgeCache);
 
     // METHOD 1: Direct Google Sheets GViz CSV Export (tab Ordenes)
     if (spreadsheetId) {
       const csvUrlsToTry = [
-        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Ordenes')}&t=${Date.now()}`,
-        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Órdenes')}&t=${Date.now()}`,
-        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=0&t=${Date.now()}`
+        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Ordenes')}&${cacheBuster}`,
+        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Órdenes')}&${cacheBuster}`,
+        `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=0&${cacheBuster}`
       ];
 
       for (const csvUrl of csvUrlsToTry) {
         try {
           const csvRes = await fetch(csvUrl, {
             method: 'GET',
-            headers: { 'Accept': 'text/csv, text/plain, */*' }
+            cache: forcePurgeCache ? 'no-store' : 'default',
+            headers: { 
+              'Accept': 'text/csv, text/plain, */*',
+              ...(forcePurgeCache ? { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' } : {})
+            }
           });
 
           if (csvRes.ok) {
