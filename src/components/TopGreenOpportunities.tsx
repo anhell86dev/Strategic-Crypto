@@ -52,13 +52,44 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
   const [isFlowchartModalOpen, setIsFlowchartModalOpen] = useState<boolean>(false);
   const [, setNowTick] = useState<number>(Date.now());
 
+  // FILTRADO ESTRICTO DE SEGURIDAD: Excluir tajantemente cualquier operación que haya tocado SL (Trade Fallido / C3)
+  const validTopStrategies = React.useMemo(() => {
+    return (topStrategies || []).filter(strat => {
+      // 1. Semáforo Rojo o bandera slHit
+      if (strat.trafficLight?.status === 'ROJO' || strat.trafficLight?.slHit) return false;
+
+      // 2. Validación de precios live y extremos 24h
+      const isLong = strat.type === 'LONG';
+      const live = strat.currentPrice || strat.entryPrice;
+      const sl = strat.stopLoss;
+      const dLow = strat.low24h !== undefined ? strat.low24h : live;
+      const dHigh = strat.high24h !== undefined ? strat.high24h : live;
+
+      // Si tocó o perforó el Stop Loss en vivo o en 24h
+      if (isLong && (live <= sl || dLow <= sl)) return false;
+      if (!isLong && (live >= sl || dHigh >= sl)) return false;
+
+      // 3. Chequeo de pubMinPrice / pubMaxPrice (mismo cálculo del flujograma táctico)
+      const pubMinPrice = Math.min(strat.entryPrice, live, dLow);
+      const pubMaxPrice = Math.max(strat.entryPrice, live, dHigh);
+      const isSlTouched = isLong ? pubMinPrice <= sl : pubMaxPrice >= sl;
+      if (isSlTouched) return false;
+
+      // 4. Estados textuales de invalidación
+      const rawStatus = ((strat.statusSheetEstrategia || '') + ' ' + (strat.status || '')).toUpperCase();
+      if (rawStatus.includes('SL TOCADO') || rawStatus.includes('INVALIDAD') || rawStatus.includes('FALLID')) return false;
+
+      return true;
+    }).slice(0, 5);
+  }, [topStrategies]);
+
   useEffect(() => {
     const timer = setInterval(() => setNowTick(Date.now()), 30000);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    const unsubscribes = topStrategies.map(strat => {
+    const unsubscribes = validTopStrategies.map(strat => {
       const sym = strat.symbol.replace(/USDT$/i, '').trim();
       return multiTimeframeService.subscribe(sym, (data) => {
         setTfDataMap(prev => ({ ...prev, [sym]: data }));
@@ -67,7 +98,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
     return () => {
       unsubscribes.forEach(unsub => unsub());
     };
-  }, [topStrategies]);
+  }, [validTopStrategies]);
 
   const toggleMultitemporal = (stratId: string | number) => {
     setExpandedMultitemporal(prev => ({
@@ -76,17 +107,17 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
     }));
   };
 
-  const isAllMultiExpanded = topStrategies.length > 0 && topStrategies.every(s => expandedMultitemporal[String(s.id)]);
+  const isAllMultiExpanded = validTopStrategies.length > 0 && validTopStrategies.every(s => expandedMultitemporal[String(s.id)]);
   const handleToggleAllMultitemporal = () => {
     const nextState = !isAllMultiExpanded;
     const update: Record<string, boolean> = {};
-    topStrategies.forEach(s => {
+    validTopStrategies.forEach(s => {
       update[String(s.id)] = nextState;
     });
     setExpandedMultitemporal(update);
   };
 
-  if (!topStrategies || topStrategies.length === 0) {
+  if (!validTopStrategies || validTopStrategies.length === 0) {
     return null;
   }
 
@@ -185,14 +216,14 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
   // Apply First Row's E1, E2, E3 Investments to all rows
   const handleApplyFirstRowToAll = () => {
-    if (!topStrategies || topStrategies.length === 0) return;
-    const firstStrat = topStrategies[0];
+    if (!validTopStrategies || validTopStrategies.length === 0) return;
+    const firstStrat = validTopStrategies[0];
     const firstE1 = getEntryInvestment(firstStrat, 'e1');
     const firstE2 = getEntryInvestment(firstStrat, 'e2');
     const firstE3 = getEntryInvestment(firstStrat, 'e3');
 
     const newEntries: Record<string, { e1: number; e2: number; e3: number }> = {};
-    topStrategies.forEach(strat => {
+    validTopStrategies.forEach(strat => {
       newEntries[String(strat.id)] = {
         e1: firstE1,
         e2: firstE2,
@@ -385,7 +416,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
           {/* Table Body */}
           <tbody className="text-xs sm:text-sm">
-            {topStrategies.map((strat, idx) => {
+            {validTopStrategies.map((strat, idx) => {
               const isLong = strat.type === 'LONG';
               const currentPrice = strat.currentPrice || strat.entryPrice;
               const distPct = strat.trafficLight?.distanceToEntryPct ?? strat.distancePercent ?? 0;
@@ -1450,7 +1481,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                         </tr>
 
                         {/* Separador Visual Grueso y Espacioso entre Estrategias */}
-                        {idx < topStrategies.length - 1 && (
+                        {idx < validTopStrategies.length - 1 && (
                           <tr className="h-6 bg-slate-950 pointer-events-none select-none border-y-2 border-slate-800/80">
                             <td colSpan={9} className="p-0 bg-slate-950">
                               <div className="h-6 w-full flex items-center justify-between px-6 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950">

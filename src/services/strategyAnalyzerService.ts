@@ -425,10 +425,15 @@ export class StrategyAnalyzerService {
     const inDcaZone = isLong ? (live <= e1 && live >= e3) : (live >= e1 && live <= e3);
     const effectiveDistance = inDcaZone ? 0 : distToE1;
 
-    // 1. ROJO: Tocó Stop Loss
+    // 1. ROJO: Tocó Stop Loss (Trade Fallido / Invalidado)
+    // Si el precio actual o el extremo 24h / publicación alcanzó o perforó el SL, la operación es FALLIDA.
+    const dLow = low24h !== undefined ? low24h : live;
+    const dHigh = high24h !== undefined ? high24h : live;
+    const pubMinPrice = Math.min(e1, live, dLow);
+    const pubMaxPrice = Math.max(e1, live, dHigh);
     const slHit = isLong 
-      ? (live <= sl || (low24h !== undefined && low24h <= sl && live <= e1))
-      : (live >= sl || (high24h !== undefined && high24h >= sl && live >= e1));
+      ? (live <= sl || dLow <= sl || pubMinPrice <= sl)
+      : (live >= sl || dHigh >= sl || pubMaxPrice >= sl);
 
     if (slHit) {
       return {
@@ -438,7 +443,7 @@ export class StrategyAnalyzerService {
         badgeBg: 'bg-rose-950/80',
         badgeBorder: 'border-rose-500/60',
         badgeText: 'text-rose-300',
-        reason: `El precio alcanzó el Stop Loss ($${sl}). Operación invalidada por gestión de riesgo.`,
+        reason: `El precio alcanzó el Stop Loss ($${sl}). Operación invalidada (Trade fallido).`,
         distanceToEntryPct: distToE1,
         riskRewardRatio,
         slHit: true,
@@ -536,7 +541,7 @@ export class StrategyAnalyzerService {
     } = strategy;
 
     // A. Check explicit status string from Sheet or Strategy object
-    const rawStatus = (statusSheetEstrategia || status || '').toUpperCase().trim();
+    const rawStatus = ((statusSheetEstrategia || '') + ' ' + (status || '')).toUpperCase().trim();
     if (
       rawStatus.includes('RETIRADA') ||
       rawStatus.includes('INACTIVA') ||
@@ -544,7 +549,8 @@ export class StrategyAnalyzerService {
       rawStatus.includes('CERRADA') ||
       rawStatus.includes('INVALIDAD') ||
       rawStatus.includes('SL TOCADO') ||
-      rawStatus.includes('FINALIZADA')
+      rawStatus.includes('FINALIZADA') ||
+      rawStatus.includes('FALLID')
     ) {
       return false;
     }
@@ -552,7 +558,7 @@ export class StrategyAnalyzerService {
     // B. Check Traffic Light Status
     if (trafficLight) {
       if (trafficLight.status === 'ROJO' || trafficLight.slHit) {
-        return false; // SL Tocado
+        return false; // SL Tocado -> Trade Fallido
       }
       if (trafficLight.status === 'NARANJA' || trafficLight.tpHitBeforeEntry) {
         return false; // Escapó a TP antes de entradas
@@ -566,10 +572,15 @@ export class StrategyAnalyzerService {
     const sl = stopLoss;
     const tp1 = orders[0]?.targetPrice || (isLong ? e1 * 1.03 : e1 * 0.97);
 
-    // 1. Check SL Hit
+    // 1. Check SL Hit: Si el precio actual o el extremo 24h / publicación alcanzó el SL, es un TRADE FALLIDO
+    const dLow = low24h !== undefined ? low24h : live;
+    const dHigh = high24h !== undefined ? high24h : live;
+    const pubMinPrice = Math.min(e1, live, dLow);
+    const pubMaxPrice = Math.max(e1, live, dHigh);
+
     const slHit = isLong 
-      ? (live <= sl || (low24h !== undefined && low24h <= sl && live <= e1))
-      : (live >= sl || (high24h !== undefined && high24h >= sl && live >= e1));
+      ? (live <= sl || dLow <= sl || pubMinPrice <= sl)
+      : (live >= sl || dHigh >= sl || pubMaxPrice >= sl);
     if (slHit) return false;
 
     // 2. Check if price touched E1 (Entry)
