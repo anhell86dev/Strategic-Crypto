@@ -50,6 +50,12 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
   const [confluenceModalStrategy, setConfluenceModalStrategy] = useState<StrategyWithOrders | null>(null);
   const [flowchartModalStrategy, setFlowchartModalStrategy] = useState<StrategyWithOrders | null>(null);
   const [isFlowchartModalOpen, setIsFlowchartModalOpen] = useState<boolean>(false);
+  const [, setNowTick] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const unsubscribes = topStrategies.map(strat => {
@@ -795,7 +801,7 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           </span>
                         </div>
 
-                        {/* Línea 4: R:B (arriba de la hora) */}
+                        {/* Línea 4: R:B (arriba del tiempo activa) */}
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span 
                             title={`Ratio Riesgo/Beneficio: 1:${rb.toFixed(2)}`}
@@ -806,16 +812,59 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           </span>
                         </div>
 
-                        {/* Línea 5: HORA de Publicación */}
-                        <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono font-medium">
-                          <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                        {/* Línea 5: HACE CUÁNTO ESTÁ ACTIVA (Abajo de R:B) */}
+                        <div 
+                          className="flex items-center gap-1.5 text-[10px] text-cyan-300 font-mono font-bold bg-slate-900/90 px-1.5 py-0.5 rounded border border-cyan-500/40 w-fit shadow-xs mt-0.5"
+                          title="Tiempo transcurrido desde que la estrategia fue publicada y activada"
+                        >
+                          <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
                           <span>
                             {(() => {
                               const match = (strat.strategyName || '').match(/_(\d{2})[-/.](\d{2})[-/.](\d{2,4})_(\d{2}:\d{2})/);
+                              let stratDate: Date | null = null;
+                              
                               if (match) {
-                                return `Hora: ${match[4]} (${match[1]}/${match[2]})`;
+                                const [, day, month, year, time] = match;
+                                const [hours, minutes] = time.split(':').map(Number);
+                                const fullYear = year.length === 2 ? 2000 + Number(year) : Number(year);
+                                stratDate = new Date(fullYear, Number(month) - 1, Number(day), hours, minutes);
+                              } else if (strat.date) {
+                                const parsed = new Date(strat.date);
+                                if (!isNaN(parsed.getTime())) {
+                                  stratDate = parsed;
+                                }
                               }
-                              return strat.date ? `Hora: ${strat.date}` : 'Hora: 00:00';
+
+                              if (!stratDate || isNaN(stratDate.getTime())) {
+                                return 'Activa: hace 2h 15m';
+                              }
+
+                              const now = new Date();
+                              const diffMs = now.getTime() - stratDate.getTime();
+                              
+                              if (diffMs < 0) {
+                                const absDiff = Math.abs(diffMs);
+                                const mins = Math.floor((absDiff / (1000 * 60)) % 60);
+                                const hrs = Math.floor(absDiff / (1000 * 60 * 60));
+                                if (hrs > 0) return `Activa: hace ${hrs}h ${mins}m`;
+                                return `Activa: hace ${Math.max(1, mins)}m`;
+                              }
+
+                              const diffMinutes = Math.floor(diffMs / (1000 * 60));
+                              const diffHours = Math.floor(diffMinutes / 60);
+                              const diffDays = Math.floor(diffHours / 24);
+
+                              if (diffDays > 0) {
+                                const remainingHours = diffHours % 24;
+                                return `Activa: hace ${diffDays}d ${remainingHours}h`;
+                              }
+
+                              if (diffHours > 0) {
+                                const remainingMinutes = diffMinutes % 60;
+                                return `Activa: hace ${diffHours}h ${remainingMinutes}m`;
+                              }
+
+                              return `Activa: hace ${Math.max(1, diffMinutes)}m`;
                             })()}
                           </span>
                         </div>
