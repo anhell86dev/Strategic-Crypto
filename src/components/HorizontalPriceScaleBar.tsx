@@ -228,20 +228,20 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
 
   // Timeframe Rows strictly ordered from top to bottom:
   // 1. Horas transcurridas (PUB - Dinámica con Círculo LIVE)
-  // 2. 4H (Cerrada - Pasado del precio)
-  // 3. 1H (Cerrada - Pasado del precio)
-  // 4. 15M (Cerrada - Pasado del precio)
-  // 5. 5M (Cerrada - Pasado del precio)
+  // 2. 5M (Cerrada)
+  // 3. 15M (Cerrada)
+  // 4. 1H (Cerrada)
+  // 5. 4H (Cerrada)
   // 6. DIARIO (Escala rectora con Círculo LIVE)
   const timeframesList = useMemo(() => {
     const candles = tfData?.candles || {};
     const baseRef = entryPrice || livePrice || 100;
     return [
       pubCandle,
-      { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: baseRef * 0.9750, close: baseRef * 0.9850, changePercent: 1.03 }), durationMinutes: 240, isClosed: true },
-      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: baseRef * 0.9850, close: baseRef * 0.9910, changePercent: 0.61 }), durationMinutes: 60, isClosed: true },
-      { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: baseRef * 0.9910, close: baseRef * 0.9940, changePercent: 0.30 }), durationMinutes: 15, isClosed: true },
       { ...(candles['5m'] || { timeframe: '5m', label: '5M', timeStr: '00:25', open: baseRef * 0.9940, close: baseRef * 0.9975, changePercent: 0.35 }), durationMinutes: 5, isClosed: true },
+      { ...(candles['15m'] || { timeframe: '15m', label: '15M', timeStr: '00:15', open: baseRef * 0.9910, close: baseRef * 0.9940, changePercent: 0.30 }), durationMinutes: 15, isClosed: true },
+      { ...(candles['1h'] || { timeframe: '1h', label: '1H', timeStr: '00:00', open: baseRef * 0.9850, close: baseRef * 0.9910, changePercent: 0.61 }), durationMinutes: 60, isClosed: true },
+      { ...(candles['4h'] || { timeframe: '4h', label: '4H', timeStr: '21:00', open: baseRef * 0.9750, close: baseRef * 0.9850, changePercent: 1.03 }), durationMinutes: 240, isClosed: true },
       { 
         timeframe: '1d', 
         label: 'DIARIO', 
@@ -258,13 +258,29 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
     ];
   }, [tfData, entryPrice, pubCandle, dOpen, dClose, dHigh, dLow, dChange]);
 
-  // UNIONES: Solo se conectan [Horas transcurridas, 4h, 1h, 15m, 5m].
+  // UNIONES ESPECÍFICAS SEGÚN ORDEN FRACTAL TEMPORAL:
+  // 4H (C) conecta con 1H (O)
+  // 1H (C) conecta con 15M (O)
+  // 15M (C) conecta con 5M (O)
+  // 5M (C) conecta con PUB (O)
   // El DIARIO NO SE DEBE CONECTAR.
   const connections = useMemo(() => {
     if (!showConnectors || timeframesList.length < 2) return [];
 
-    const connectedList = timeframesList.filter(tf => tf.timeframe !== '1d');
     const totalRows = timeframesList.length;
+
+    const candlePub = timeframesList.find(tf => tf.timeframe === 'pub' || (tf as any).isPublicationTimeframe);
+    const candle5m = timeframesList.find(tf => tf.timeframe === '5m');
+    const candle15m = timeframesList.find(tf => tf.timeframe === '15m');
+    const candle1h = timeframesList.find(tf => tf.timeframe === '1h');
+    const candle4h = timeframesList.find(tf => tf.timeframe === '4h');
+
+    const pairs = [
+      { from: candle4h, to: candle1h, label: '4H (C) ➔ 1H (O)' },
+      { from: candle1h, to: candle15m, label: '1H (C) ➔ 15M (O)' },
+      { from: candle15m, to: candle5m, label: '15M (C) ➔ 5M (O)' },
+      { from: candle5m, to: candlePub, label: '5M (C) ➔ PUB (O)' }
+    ];
 
     const conns: {
       fromIndex: number;
@@ -273,47 +289,41 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
       y1: number;
       x2: number;
       y2: number;
+      label: string;
       higherLabel: string;
       lowerLabel: string;
     }[] = [];
 
-    for (let i = 0; i < connectedList.length - 1; i++) {
-      const current = connectedList[i];
-      const next = connectedList[i + 1];
+    for (const pair of pairs) {
+      if (!pair.from || !pair.to) continue;
 
-      const currentIndex = timeframesList.indexOf(current);
-      const nextIndex = timeframesList.indexOf(next);
+      const fromIndex = timeframesList.indexOf(pair.from);
+      const toIndex = timeframesList.indexOf(pair.to);
 
-      const durCurrent = (current as any).durationMinutes || (current.timeframe === 'pub' ? pubInfo.hours * 60 : 0);
-      const durNext = (next as any).durationMinutes || (next.timeframe === 'pub' ? pubInfo.hours * 60 : 0);
+      if (fromIndex === -1 || toIndex === -1) continue;
 
-      // Cierre de la temporalidad mayor -> Apertura de la menor
-      const isCurrentHigher = durCurrent >= durNext;
-      const higherTF = isCurrentHigher ? current : next;
-      const lowerTF = isCurrentHigher ? next : current;
-      const higherIndex = isCurrentHigher ? currentIndex : nextIndex;
-      const lowerIndex = isCurrentHigher ? nextIndex : currentIndex;
+      // Cierre del origen (pair.from.close) ➔ Apertura del destino (pair.to.open)
+      const x1 = getDailyPercentPos(pair.from.close);
+      const y1 = ((fromIndex + 0.5) / totalRows) * 100;
 
-      const x1 = getDailyPercentPos(higherTF.close);
-      const y1 = ((higherIndex + 0.5) / totalRows) * 100;
-
-      const x2 = getDailyPercentPos(lowerTF.open);
-      const y2 = ((lowerIndex + 0.5) / totalRows) * 100;
+      const x2 = getDailyPercentPos(pair.to.open);
+      const y2 = ((toIndex + 0.5) / totalRows) * 100;
 
       conns.push({
-        fromIndex: higherIndex,
-        toIndex: lowerIndex,
+        fromIndex,
+        toIndex,
         x1,
         y1,
         x2,
         y2,
-        higherLabel: higherTF.label,
-        lowerLabel: lowerTF.label
+        label: pair.label,
+        higherLabel: pair.from.label,
+        lowerLabel: pair.to.label
       });
     }
 
     return conns;
-  }, [timeframesList, showConnectors, minDailyScale, dailyScaleSpan, pubInfo.hours]);
+  }, [timeframesList, showConnectors, minDailyScale, dailyScaleSpan]);
 
   // ATR metrics
   const atrVal = tfData?.atr14 || (livePrice * 0.02);
@@ -429,7 +439,7 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
             {showConnectors && (
               <span className="flex items-center gap-1.5 text-cyan-300 font-bold">
                 <span className="inline-block w-4 h-0.5 border-t-2 border-dashed border-cyan-400 animate-dash-flow" /> 
-                Unión: Cierre (Mayor) ➔ Apertura (Menor)
+                Unión Fractal: 4H(C) ➔ 1H(O) ➔ 15M(O) ➔ 5M(O) ➔ PUB(O)
               </span>
             )}
           </div>
@@ -712,11 +722,17 @@ export const HorizontalPriceScaleBar: React.FC<HorizontalPriceScaleBarProps> = (
                           d={pathD}
                           fill="none"
                           stroke="url(#connectorGlow)"
-                          strokeWidth="1.5"
+                          strokeWidth="1.8"
                           strokeDasharray="4 3"
                           className="animate-dash-flow"
                           vectorEffect="non-scaling-stroke"
                         />
+
+                        {/* Origin terminal dot: Cierre */}
+                        <circle cx={conn.x1} cy={conn.y1} r="0.9" fill="#38bdf8" />
+
+                        {/* Destination terminal dot: Apertura */}
+                        <circle cx={conn.x2} cy={conn.y2} r="0.9" fill="#fbbf24" />
                       </g>
                     );
                   })}

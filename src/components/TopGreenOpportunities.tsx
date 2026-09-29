@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StrategyWithOrders } from '../types';
 import { indicatorsService } from '../services/indicatorsService';
+import { multiTimeframeService } from '../services/multiTimeframeService';
+import { HorizontalPriceScaleBar } from './HorizontalPriceScaleBar';
 import { 
   Trophy, 
   Flame, 
@@ -12,7 +14,11 @@ import {
   CheckCircle2, 
   Award,
   Copy,
-  ShieldCheck
+  ShieldCheck,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  Activity
 } from 'lucide-react';
 
 interface TopGreenOpportunitiesProps {
@@ -28,18 +34,48 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
   onFilterGreen,
   isGreenFilterActive = false
 }) => {
-  // Local state for interactive investment, leverage, checked entry levels, editable entry prices and assets per strategy
+  // Local state for interactive investment, leverage, checked entry levels, editable entry prices per strategy
   const [investments, setInvestments] = useState<Record<string, number>>({});
   const [leverages, setLeverages] = useState<Record<string, number>>({});
   const [checkedEntries, setCheckedEntries] = useState<Record<string, { e1: boolean; e2: boolean; e3: boolean }>>({});
-  const [customPrices, setCustomPrices] = useState<Record<string, { e1?: number; e2?: number; e3?: number }>>({});
-  const [customAssets, setCustomAssets] = useState<Record<string, { e1?: number; e2?: number; e3?: number }>>({});
+  const [customPrices, setCustomPrices] = useState<Record<string, { e1?: number; e2?: number; e3?: number; tp1?: number; tp2?: number; tp3?: number }>>({});
+  const [expandedMultitemporal, setExpandedMultitemporal] = useState<Record<string, boolean>>({});
+  const [tfDataMap, setTfDataMap] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const unsubscribes = topStrategies.map(strat => {
+      const sym = strat.symbol.replace(/USDT$/i, '').trim();
+      return multiTimeframeService.subscribe(sym, (data) => {
+        setTfDataMap(prev => ({ ...prev, [sym]: data }));
+      });
+    });
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [topStrategies]);
+
+  const toggleMultitemporal = (stratId: string | number) => {
+    setExpandedMultitemporal(prev => ({
+      ...prev,
+      [String(stratId)]: !prev[String(stratId)]
+    }));
+  };
+
+  const isAllMultiExpanded = topStrategies.length > 0 && topStrategies.every(s => expandedMultitemporal[String(s.id)]);
+  const handleToggleAllMultitemporal = () => {
+    const nextState = !isAllMultiExpanded;
+    const update: Record<string, boolean> = {};
+    topStrategies.forEach(s => {
+      update[String(s.id)] = nextState;
+    });
+    setExpandedMultitemporal(update);
+  };
 
   if (!topStrategies || topStrategies.length === 0) {
     return null;
   }
 
-  const handleCustomPriceChange = (stratId: string | number, level: 'e1' | 'e2' | 'e3', valueStr: string) => {
+  const handleCustomPriceChange = (stratId: string | number, level: 'e1' | 'e2' | 'e3' | 'tp1' | 'tp2' | 'tp3', valueStr: string) => {
     const key = String(stratId);
     const val = parseFloat(valueStr);
     setCustomPrices(prev => ({
@@ -51,14 +87,16 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
     }));
   };
 
-  const handleCustomAssetsChange = (stratId: string | number, level: 'e1' | 'e2' | 'e3', valueStr: string) => {
+  const handleCustomTpPctChange = (stratId: string | number, tpKey: 'tp1' | 'tp2' | 'tp3', pctStr: string, refPrice: number, isLong: boolean) => {
     const key = String(stratId);
-    const val = parseFloat(valueStr);
-    setCustomAssets(prev => ({
+    const pct = parseFloat(pctStr);
+    if (isNaN(pct) || refPrice <= 0) return;
+    const newPrice = isLong ? refPrice * (1 + pct / 100) : refPrice * (1 - pct / 100);
+    setCustomPrices(prev => ({
       ...prev,
       [key]: {
         ...prev[key],
-        [level]: isNaN(val) || val <= 0 ? undefined : val
+        [tpKey]: newPrice > 0 ? Number(newPrice.toFixed(6)) : undefined
       }
     }));
   };
@@ -177,6 +215,16 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
         {/* Global Toolbar Buttons */}
         <div className="flex items-center gap-2.5 flex-wrap self-start md:self-auto">
+          {/* Button: Toggle Multitemporalidad for all */}
+          <button
+            onClick={handleToggleAllMultitemporal}
+            title="Expandir o colapsar la vista multitemporal de las 5 oportunidades"
+            className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center gap-2 cursor-pointer shadow-md bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/60 font-mono"
+          >
+            <Activity className="w-4 h-4 text-cyan-400" />
+            <span>{isAllMultiExpanded ? 'Ocultar Multitemporal' : 'Expandir Multitemporal (Todos)'}</span>
+          </button>
+
           {/* Button: Sync / Copy Row #1 Values to All */}
           <button
             onClick={handleApplyFirstRowToAll}
@@ -212,8 +260,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
             <tr className="border-b border-emerald-500/30 text-xs font-black text-slate-200 uppercase tracking-wider bg-slate-950/90">
               <th rowSpan={2} className="py-3 px-3 text-center w-12 border-r border-slate-800">Rank</th>
               <th rowSpan={2} className="py-3 px-3 w-24 border-r border-slate-800">Semáforo</th>
-              <th rowSpan={2} className="py-3 px-3 border-r border-slate-800">Par / Dirección / R:B</th>
-              <th rowSpan={2} className="py-3 px-3 text-center border-r border-slate-800">Precio LIVE / Dist.</th>
+              <th rowSpan={2} className="py-3 px-3 border-r border-slate-800 min-w-[210px]">
+                Par / Dirección / Precio Live
+              </th>
               <th rowSpan={2} className="py-3 px-2 text-center w-28 border-r border-slate-800">
                 <div className="flex flex-col items-center gap-0.5">
                   <span>Inversión ($)</span>
@@ -238,7 +287,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                   </button>
                 </div>
               </th>
-              <th rowSpan={2} className="py-3 px-3 text-center border-r border-slate-800">Nominal ($)</th>
 
               {/* Group 2: Entradas DCA */}
               <th colSpan={3} className="py-2 px-3 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
@@ -273,10 +321,25 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 </div>
               </th>
 
-              {/* Take Profit Sub-headers */}
-              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[85px]">TP1</th>
-              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[85px]">TP2</th>
-              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 min-w-[85px]">TP3</th>
+              {/* Take Profit Sub-headers (precio / %) */}
+              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[95px]">
+                <div className="flex flex-col items-center">
+                  <span>TP1</span>
+                  <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / %</span>
+                </div>
+              </th>
+              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 border-r border-emerald-800/40 min-w-[95px]">
+                <div className="flex flex-col items-center">
+                  <span>TP2</span>
+                  <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / %</span>
+                </div>
+              </th>
+              <th className="py-2 px-2 text-center text-emerald-300 bg-emerald-950/40 min-w-[95px]">
+                <div className="flex flex-col items-center">
+                  <span>TP3</span>
+                  <span className="text-[9px] text-emerald-400/90 font-normal lowercase tracking-normal">precio / %</span>
+                </div>
+              </th>
             </tr>
           </thead>
 
@@ -302,7 +365,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
               // Entry Allocations DCA
               const stratCustoms = customPrices[String(strat.id)] || {};
-              const stratCustomAssets = customAssets[String(strat.id)] || {};
 
               const pE1 = stratCustoms.e1 ?? (strat.entryPrice || currentPrice);
               const pE2 = stratCustoms.e2 ?? (strat.e2Price || (pE1 > 0 ? (isLong ? pE1 * 0.98 : pE1 * 1.02) : 0));
@@ -319,17 +381,13 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const defaultNominalE2 = nominalTotal * (e2Pct / 100);
               const defaultNominalE3 = nominalTotal * (e3Pct / 100);
 
-              const defaultAssetsE1 = pE1 > 0 ? (defaultNominalE1 / pE1) : 0;
-              const defaultAssetsE2 = (hasE2 && pE2 > 0) ? (defaultNominalE2 / pE2) : 0;
-              const defaultAssetsE3 = (hasE3 && pE3 > 0) ? (defaultNominalE3 / pE3) : 0;
+              const assetsE1 = pE1 > 0 ? (defaultNominalE1 / pE1) : 0;
+              const assetsE2 = (hasE2 && pE2 > 0) ? (defaultNominalE2 / pE2) : 0;
+              const assetsE3 = (hasE3 && pE3 > 0) ? (defaultNominalE3 / pE3) : 0;
 
-              const assetsE1 = stratCustomAssets.e1 !== undefined ? stratCustomAssets.e1 : defaultAssetsE1;
-              const assetsE2 = stratCustomAssets.e2 !== undefined ? stratCustomAssets.e2 : defaultAssetsE2;
-              const assetsE3 = stratCustomAssets.e3 !== undefined ? stratCustomAssets.e3 : defaultAssetsE3;
-
-              const nominalE1 = stratCustomAssets.e1 !== undefined ? (assetsE1 * pE1) : defaultNominalE1;
-              const nominalE2 = stratCustomAssets.e2 !== undefined ? (assetsE2 * pE2) : defaultNominalE2;
-              const nominalE3 = stratCustomAssets.e3 !== undefined ? (assetsE3 * pE3) : defaultNominalE3;
+              const nominalE1 = defaultNominalE1;
+              const nominalE2 = defaultNominalE2;
+              const nominalE3 = defaultNominalE3;
 
               const assetsE12 = assetsE1 + assetsE2;
               const nominalE12 = nominalE1 + nominalE2;
@@ -413,28 +471,59 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const tp2 = allTpOrders[1];
               const tp3 = allTpOrders[2];
 
-              const calcTpProfitActive = (tp?: { targetPrice: number; closePercentage?: number }) => {
-                if (!tp || !tp.targetPrice) return null;
-                const closePct = tp.closePercentage || 100;
+              // Determine default prices
+              const defaultTp1Price = tp1?.targetPrice || (isLong ? pE1 * 1.03 : pE1 * 0.97);
+              const defaultTp2Price = tp2?.targetPrice || (isLong ? pE1 * 1.06 : pE1 * 0.94);
+              const defaultTp3Price = tp3?.targetPrice || (isLong ? pE1 * 1.10 : pE1 * 0.90);
+
+              const pTp1 = stratCustoms.tp1 ?? defaultTp1Price;
+              const pTp2 = stratCustoms.tp2 ?? defaultTp2Price;
+              const pTp3 = stratCustoms.tp3 ?? defaultTp3Price;
+
+              const hasDcaActive = (checked.e2 && hasE2) || (checked.e3 && hasE3);
+              const refEntryPrice = hasDcaActive ? activeAvgEntryPrice : pE1;
+
+              const calcTpProfitActive = (targetPrice: number, closePercentage?: number) => {
+                if (!targetPrice || targetPrice <= 0) return null;
+                const closePct = closePercentage || 100;
                 const assetsClosed = activeAssets * (closePct / 100);
                 const profitUsd = activeAssets > 0
                   ? (isLong
-                      ? assetsClosed * (tp.targetPrice - activeAvgEntryPrice)
-                      : assetsClosed * (activeAvgEntryPrice - tp.targetPrice))
+                      ? assetsClosed * (targetPrice - activeAvgEntryPrice)
+                      : assetsClosed * (activeAvgEntryPrice - targetPrice))
                   : 0;
                 return {
-                  price: tp.targetPrice,
+                  price: targetPrice,
                   profit: profitUsd,
                   pct: closePct
                 };
               };
 
-              const tp1Data = calcTpProfitActive(tp1);
-              const tp2Data = calcTpProfitActive(tp2);
-              const tp3Data = calcTpProfitActive(tp3);
+              const tp1Data = calcTpProfitActive(pTp1, tp1?.closePercentage || 40);
+              const tp2Data = calcTpProfitActive(pTp2, tp2?.closePercentage || 35);
+              const tp3Data = calcTpProfitActive(pTp3, tp3?.closePercentage || 25);
 
-              const hasDcaActive = (checked.e2 && hasE2) || (checked.e3 && hasE3);
-              const refEntryPrice = hasDcaActive ? activeAvgEntryPrice : pE1;
+              // Target Gain % from Entry/BE
+              const getTpGainPct = (targetPrice: number) => {
+                if (!refEntryPrice || refEntryPrice <= 0 || !targetPrice || targetPrice <= 0) return 0;
+                return ((targetPrice - refEntryPrice) / refEntryPrice) * 100 * (isLong ? 1 : -1);
+              };
+
+              const tp1GainPct = getTpGainPct(pTp1);
+              const tp2GainPct = getTpGainPct(pTp2);
+              const tp3GainPct = getTpGainPct(pTp3);
+
+              const stratWithUpdatedTps = {
+                ...strat,
+                entryPrice: pE1,
+                e2Price: hasE2 ? pE2 : undefined,
+                e3Price: hasE3 ? pE3 : undefined,
+                orders: [
+                  { type: 'TP1', targetPrice: pTp1, closePercentage: tp1?.closePercentage || 40 },
+                  { type: 'TP2', targetPrice: pTp2, closePercentage: tp2?.closePercentage || 35 },
+                  { type: 'TP3', targetPrice: pTp3, closePercentage: tp3?.closePercentage || 25 },
+                ]
+              };
 
               const liveVsEntryPct = refEntryPrice > 0
                 ? ((currentPrice - refEntryPrice) / refEntryPrice) * 100 * (isLong ? 1 : -1)
@@ -451,6 +540,12 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                 ? ((slPrice - refEntryPrice) / refEntryPrice) * 100 * (isLong ? 1 : -1) 
                 : 0;
               const slDiffPctStr = `${slDiffPct > 0 ? '+' : ''}${slDiffPct.toFixed(1)}%`;
+
+              const livePriceDiff = (currentPrice - refEntryPrice) * (isLong ? 1 : -1);
+              const liveChangePctStr = `${liveVsEntryPct >= 0 ? '+' : ''}${liveVsEntryPct.toFixed(2)}%`;
+              const liveChangeUsdStr = livePnlUsd !== 0 
+                ? `${livePnlUsd >= 0 ? '+' : '-'}$${Math.abs(livePnlUsd).toFixed(2)}`
+                : `${livePriceDiff >= 0 ? '+' : '-'}$${Math.abs(livePriceDiff).toFixed(2)}`;
 
               return (
                 <React.Fragment key={strat.id}>
@@ -499,58 +594,58 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       </div>
                     </td>
 
-                    {/* Par / Dirección / Ratio R:B */}
-                    <td rowSpan={2} className="py-2.5 px-3 border-r border-slate-800 align-top">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-black text-white text-base group-hover:text-emerald-300 transition-colors">
-                          {symbolClean}/USDT
-                        </span>
-                        <span className={`inline-flex items-center gap-1 text-xs font-black px-2 py-0.5 rounded uppercase ${
-                          isLong
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-600'
-                            : 'bg-rose-950 text-rose-300 border border-rose-600'
-                        }`}>
-                          {isLong ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                          {strat.type}
-                        </span>
-                        
-                        {/* Ratio R:B Badge Integrado */}
-                        <span 
-                          title={`Ratio Riesgo/Beneficio: 1:${rb.toFixed(2)}`}
-                          className="inline-flex items-center gap-1 text-xs font-black px-2 py-0.5 rounded bg-purple-950 text-purple-200 border border-purple-500"
-                        >
-                          <Scale className="w-3 h-3 text-purple-300" />
-                          <span>1:{rb.toFixed(2)}</span>
-                        </span>
-                      </div>
-                      <div className="text-xs font-medium text-slate-300 truncate max-w-[200px] mt-1">
-                        {displayStrategyName}
-                      </div>
-                    </td>
+                    {/* Par / Dirección / Precio Live / Estrategia / R:B Integrado */}
+                    <td rowSpan={2} className="py-2.5 px-3 border-r border-slate-800 align-top font-mono">
+                      <div className="flex flex-col gap-1.5">
+                        {/* Línea 1: PAR Dirección */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-black text-white text-base group-hover:text-emerald-300 transition-colors">
+                            {symbolClean}/USDT
+                          </span>
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-black px-1.5 py-0.5 rounded uppercase ${
+                            isLong
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-600'
+                              : 'bg-rose-950 text-rose-300 border border-rose-600'
+                          }`}>
+                            {isLong ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                            {strat.type}
+                          </span>
+                        </div>
 
-                    {/* Precio LIVE / Distancia a Entrada */}
-                    <td rowSpan={2} className="py-2.5 px-3 text-center whitespace-nowrap border-r border-slate-800 align-top">
-                      <div className="flex flex-col items-center">
-                        <span className="font-black text-white text-sm sm:text-base font-mono">
-                          {formatPrice(currentPrice)}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 text-xs font-extrabold px-2 py-0.5 rounded mt-1 border ${
-                          distPct <= 0.2
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-400'
-                            : 'bg-cyan-950 text-cyan-300 border border-cyan-400'
-                        }`}>
-                          <Target className="w-3 h-3 text-cyan-400" />
-                          <span>{distPct <= 0.1 ? 'En Zona DCA' : `${distPct.toFixed(2)}% E1`}</span>
-                        </span>
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded mt-1 border shadow-xs ${
-                          isAdvancing 
-                            ? 'text-emerald-300 bg-emerald-950/90 border-emerald-600/70' 
-                            : 'text-rose-300 bg-rose-950/90 border-rose-600/70'
-                        }`}>
-                          {isAdvancing 
-                            ? (hasDcaActive ? '📈 Ganancia BE' : '📈 Ganancia E1') 
-                            : (hasDcaActive ? '📉 Bajo BE' : '📉 Bajo E1')}
-                        </span>
+                        {/* Línea 2: Precio Live %cambio $cambio */}
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                          <span className="font-black text-white font-mono text-sm">
+                            {formatPrice(currentPrice)}
+                          </span>
+                          <span className={`font-black text-xs font-mono px-1 py-0.2 rounded border ${
+                            isAdvancing 
+                              ? 'text-emerald-300 bg-emerald-950/80 border-emerald-600/60' 
+                              : 'text-rose-300 bg-rose-950/80 border-rose-600/60'
+                          }`}>
+                            {liveChangePctStr}
+                          </span>
+                          <span className={`text-[11px] font-bold font-mono ${
+                            isAdvancing ? 'text-emerald-400' : 'text-rose-400'
+                          }`}>
+                            {liveChangeUsdStr}
+                          </span>
+                        </div>
+
+                        {/* Línea 3: ESTRATEGIA */}
+                        <div className="text-[11px] font-bold text-slate-300 truncate max-w-[210px] uppercase tracking-wide">
+                          {displayStrategyName}
+                        </div>
+
+                        {/* Línea 4: R:B */}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span 
+                            title={`Ratio Riesgo/Beneficio: 1:${rb.toFixed(2)}`}
+                            className="inline-flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded bg-purple-950/90 text-purple-200 border border-purple-500/70"
+                          >
+                            <Scale className="w-3 h-3 text-purple-300" />
+                            <span>R:B 1:{rb.toFixed(2)}</span>
+                          </span>
+                        </div>
                       </div>
                     </td>
 
@@ -590,13 +685,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                           className="w-14 px-1.5 py-1.5 bg-slate-900 border-2 border-amber-500/70 focus:border-amber-400 rounded-xl text-center font-mono font-black text-amber-300 text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none shadow-lg"
                         />
                       </div>
-                    </td>
-
-                    {/* Nominal ($) */}
-                    <td rowSpan={2} className="py-2.5 px-3 text-center whitespace-nowrap border-r border-slate-800 align-top">
-                      <span className="font-black text-cyan-200 text-sm font-mono bg-cyan-950 border border-cyan-500/70 px-2.5 py-1.5 rounded-xl shadow-sm inline-block">
-                        ${nominalTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
                     </td>
 
                     {/* DCA E3 (Solo Precio y Activos con Checkbox) */}
@@ -641,24 +729,12 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               title="Precio E3 ($)"
                             />
                           </div>
-                          {/* Fila 2: Cantidad de Activos Editable */}
-                          <div className="flex items-center justify-center gap-1">
-                            <span className={`text-[10px] font-bold uppercase font-mono tracking-tighter ${isE3Live ? 'text-cyan-200 font-black' : 'text-cyan-400/90'}`} title="Cantidad de activos">Act:</span>
-                            <input
-                              type="number"
-                              step="any"
-                              placeholder="Cant."
-                              value={stratCustomAssets.e3 !== undefined ? stratCustomAssets.e3 : (assetsE3 > 0 ? (assetsE3 < 1 ? Number(assetsE3.toFixed(4)) : Number(assetsE3.toFixed(2))) : '')}
-                              onChange={(e) => handleCustomAssetsChange(strat.id, 'e3', e.target.value)}
-                              className={`w-20 px-1.5 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all ${
-                                isE3Live
-                                  ? 'bg-slate-900 text-emerald-200 border-emerald-400 ring-1 ring-emerald-400 font-black'
-                                  : checked.e3
-                                  ? 'bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300'
-                                  : 'bg-slate-950 text-slate-500 border-slate-700/60'
-                              }`}
-                              title="Cantidad de Activos para E3 (Editable)"
-                            />
+                          {/* Fila 2: Cantidad de Activos (No modificable) */}
+                          <div className="flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/60 shadow-xs">
+                            <span className="text-[10px] font-bold uppercase font-mono text-cyan-400/90">Act:</span>
+                            <span className="text-[11px] font-bold font-mono text-emerald-300">
+                              {assetsE3 > 0 ? (assetsE3 < 1 ? assetsE3.toFixed(4) : assetsE3.toFixed(2)) : '--'}
+                            </span>
                           </div>
                         </div>
                       ) : (
@@ -708,24 +784,12 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               title="Precio E2 ($)"
                             />
                           </div>
-                          {/* Fila 2: Cantidad de Activos Editable */}
-                          <div className="flex items-center justify-center gap-1">
-                            <span className={`text-[10px] font-bold uppercase font-mono tracking-tighter ${isE2Live ? 'text-cyan-200 font-black' : 'text-cyan-400/90'}`} title="Cantidad de activos">Act:</span>
-                            <input
-                              type="number"
-                              step="any"
-                              placeholder="Cant."
-                              value={stratCustomAssets.e2 !== undefined ? stratCustomAssets.e2 : (assetsE2 > 0 ? (assetsE2 < 1 ? Number(assetsE2.toFixed(4)) : Number(assetsE2.toFixed(2))) : '')}
-                              onChange={(e) => handleCustomAssetsChange(strat.id, 'e2', e.target.value)}
-                              className={`w-20 px-1.5 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all ${
-                                isE2Live
-                                  ? 'bg-slate-900 text-emerald-200 border-emerald-400 ring-1 ring-emerald-400 font-black'
-                                  : checked.e2
-                                  ? 'bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300'
-                                  : 'bg-slate-950 text-slate-500 border-slate-700/60'
-                              }`}
-                              title="Cantidad de Activos para E2 (Editable)"
-                            />
+                          {/* Fila 2: Cantidad de Activos (No modificable) */}
+                          <div className="flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/60 shadow-xs">
+                            <span className="text-[10px] font-bold uppercase font-mono text-cyan-400/90">Act:</span>
+                            <span className="text-[11px] font-bold font-mono text-emerald-300">
+                              {assetsE2 > 0 ? (assetsE2 < 1 ? assetsE2.toFixed(4) : assetsE2.toFixed(2)) : '--'}
+                            </span>
                           </div>
                         </div>
                       ) : (
@@ -774,59 +838,131 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             title="Precio E1 ($)"
                           />
                         </div>
-                        {/* Fila 2: Cantidad de Activos Editable */}
-                        <div className="flex items-center justify-center gap-1">
-                          <span className={`text-[10px] font-bold uppercase font-mono tracking-tighter ${isE1Live ? 'text-cyan-200 font-black' : 'text-cyan-400/90'}`} title="Cantidad de activos">Act:</span>
-                          <input
-                            type="number"
-                            step="any"
-                            placeholder="Cant."
-                            value={stratCustomAssets.e1 !== undefined ? stratCustomAssets.e1 : (assetsE1 > 0 ? (assetsE1 < 1 ? Number(assetsE1.toFixed(4)) : Number(assetsE1.toFixed(2))) : '')}
-                            onChange={(e) => handleCustomAssetsChange(strat.id, 'e1', e.target.value)}
-                            className={`w-20 px-1.5 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all ${
-                              isE1Live
-                                ? 'bg-slate-900 text-emerald-200 border-emerald-400 ring-1 ring-emerald-400 font-black'
-                                : checked.e1
-                                ? 'bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300'
-                                : 'bg-slate-950 text-slate-500 border-slate-700/60'
-                            }`}
-                            title="Cantidad de Activos para E1 (Editable)"
-                          />
+                        {/* Fila 2: Cantidad de Activos (No modificable) */}
+                        <div className="flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/60 shadow-xs">
+                          <span className="text-[10px] font-bold uppercase font-mono text-cyan-400/90">Act:</span>
+                          <span className="text-[11px] font-bold font-mono text-emerald-300">
+                            {assetsE1 > 0 ? (assetsE1 < 1 ? assetsE1.toFixed(4) : assetsE1.toFixed(2)) : '--'}
+                          </span>
                         </div>
                       </div>
                     </td>
 
-                    {/* TP1 (Solo Precio) */}
-                    <td rowSpan={2} className="py-3 px-3 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
-                      {tp1Data ? (
-                        <span className="font-black text-emerald-300 text-sm">
-                          {formatPrice(tp1Data.price)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500 font-mono text-xs">--</span>
-                      )}
+                    {/* TP1 (Precio Editable + % de Ganancia Editable + USD Profit) */}
+                    <td rowSpan={2} className="py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
+                      <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        {/* Fila 1: Precio TP1 Editable */}
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="TP1 ($)"
+                            value={pTp1 || ''}
+                            onChange={(e) => handleCustomPriceChange(strat.id, 'tp1', e.target.value)}
+                            className="w-20 px-1.5 py-0.5 text-xs text-center font-bold font-mono rounded border transition-all bg-slate-900 text-emerald-200 border-emerald-500/80 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300"
+                            title="Precio TP1 ($) - Editable"
+                          />
+                        </div>
+
+                        {/* Fila 2: % de Ganancia Editable */}
+                        <div className="flex items-center justify-center gap-0.5">
+                          <span className="text-[10px] font-bold text-emerald-400/90 font-mono">%:</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="%"
+                            value={Number(tp1GainPct.toFixed(1))}
+                            onChange={(e) => handleCustomTpPctChange(strat.id, 'tp1', e.target.value, refEntryPrice, isLong)}
+                            className="w-14 px-1 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300"
+                            title="% de ganancia desde entrada/BE - Editable"
+                          />
+                        </div>
+
+                        {/* Fila 3: Beneficio en USD */}
+                        {tp1Data && tp1Data.profit > 0 && (
+                          <span className="text-[9px] text-emerald-400/90 font-medium">
+                            +${tp1Data.profit.toFixed(1)}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* TP2 (Solo Precio) */}
-                    <td rowSpan={2} className="py-3 px-3 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
-                      {tp2Data ? (
-                        <span className="font-black text-emerald-300 text-sm">
-                          {formatPrice(tp2Data.price)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500 font-mono text-xs">--</span>
-                      )}
+                    {/* TP2 (Precio Editable + % de Ganancia Editable + USD Profit) */}
+                    <td rowSpan={2} className="py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
+                      <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        {/* Fila 1: Precio TP2 Editable */}
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="TP2 ($)"
+                            value={pTp2 || ''}
+                            onChange={(e) => handleCustomPriceChange(strat.id, 'tp2', e.target.value)}
+                            className="w-20 px-1.5 py-0.5 text-xs text-center font-bold font-mono rounded border transition-all bg-slate-900 text-emerald-200 border-emerald-500/80 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300"
+                            title="Precio TP2 ($) - Editable"
+                          />
+                        </div>
+
+                        {/* Fila 2: % de Ganancia Editable */}
+                        <div className="flex items-center justify-center gap-0.5">
+                          <span className="text-[10px] font-bold text-emerald-400/90 font-mono">%:</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="%"
+                            value={Number(tp2GainPct.toFixed(1))}
+                            onChange={(e) => handleCustomTpPctChange(strat.id, 'tp2', e.target.value, refEntryPrice, isLong)}
+                            className="w-14 px-1 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300"
+                            title="% de ganancia desde entrada/BE - Editable"
+                          />
+                        </div>
+
+                        {/* Fila 3: Beneficio en USD */}
+                        {tp2Data && tp2Data.profit > 0 && (
+                          <span className="text-[9px] text-emerald-400/90 font-medium">
+                            +${tp2Data.profit.toFixed(1)}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* TP3 (Solo Precio) */}
-                    <td rowSpan={2} className="py-3 px-3 text-center whitespace-nowrap bg-emerald-950/20 font-mono align-middle">
-                      {tp3Data ? (
-                        <span className="font-black text-emerald-300 text-sm">
-                          {formatPrice(tp3Data.price)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500 font-mono text-xs">--</span>
-                      )}
+                    {/* TP3 (Precio Editable + % de Ganancia Editable + USD Profit) */}
+                    <td rowSpan={2} className="py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 font-mono align-middle">
+                      <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        {/* Fila 1: Precio TP3 Editable */}
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="TP3 ($)"
+                            value={pTp3 || ''}
+                            onChange={(e) => handleCustomPriceChange(strat.id, 'tp3', e.target.value)}
+                            className="w-20 px-1.5 py-0.5 text-xs text-center font-bold font-mono rounded border transition-all bg-slate-900 text-emerald-200 border-emerald-500/80 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300"
+                            title="Precio TP3 ($) - Editable"
+                          />
+                        </div>
+
+                        {/* Fila 2: % de Ganancia Editable */}
+                        <div className="flex items-center justify-center gap-0.5">
+                          <span className="text-[10px] font-bold text-emerald-400/90 font-mono">%:</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="%"
+                            value={Number(tp3GainPct.toFixed(1))}
+                            onChange={(e) => handleCustomTpPctChange(strat.id, 'tp3', e.target.value, refEntryPrice, isLong)}
+                            className="w-14 px-1 py-0.5 text-[11px] text-center font-bold font-mono rounded border transition-all bg-slate-900 text-emerald-300 border-emerald-600/70 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-300"
+                            title="% de ganancia desde entrada/BE - Editable"
+                          />
+                        </div>
+
+                        {/* Fila 3: Beneficio en USD */}
+                        {tp3Data && tp3Data.profit > 0 && (
+                          <span className="text-[9px] text-emerald-400/90 font-medium">
+                            +${tp3Data.profit.toFixed(1)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
 
@@ -835,27 +971,12 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     onClick={() => onSelectStrategy && onSelectStrategy(strat)}
                     className="transition-colors duration-200 cursor-pointer bg-slate-950/40"
                   >
-                    <td colSpan={3} className="py-1 px-2.5 text-center bg-rose-950/30 border-r border-slate-800 border-t border-rose-900/40 font-mono">
-                      <div className="flex items-center justify-between gap-2 px-2.5 py-1 rounded-md bg-rose-950/80 border border-rose-500/60 shadow-xs">
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
-                          <span className="text-[10px] font-black uppercase text-rose-300 tracking-wider">
-                            🛑 SL Global (E1..E3):
-                          </span>
-                        </div>
-                        <span className="font-mono font-black text-xs text-rose-200 bg-rose-900/90 px-2 py-0.5 rounded border border-rose-500/50 shadow-xs">
-                          {formatPrice(slPrice)}
+                    <td colSpan={3} className="py-1.5 px-2 text-center bg-rose-950/30 border-r border-slate-800 border-t border-rose-900/40 font-mono">
+                      <div className="flex items-center justify-center gap-1.5 text-xs font-mono font-bold text-rose-300">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0" />
+                        <span>
+                          SL Global: Precio: <strong className="text-white font-black">{formatPrice(slPrice)}</strong> • %: <strong className="text-rose-200 font-black">{slDiffPctStr}</strong> • $: <strong className="text-rose-300 font-black">-${activeLoss > 0 ? activeLoss.toFixed(2) : '0.00'}</strong>
                         </span>
-                        <div className="flex items-center gap-1.5 text-[10px] font-mono shrink-0">
-                          <span className="font-bold text-rose-300">
-                            {slDiffPctStr}
-                          </span>
-                          {activeLoss > 0 && (
-                            <span className="text-rose-400 font-medium">
-                              (-${activeLoss.toFixed(2)})
-                            </span>
-                          )}
-                        </div>
                       </div>
                     </td>
                   </tr>
@@ -917,147 +1038,263 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       return `${sign}${pct.toFixed(1)}%`;
                     };
 
+                    const symClean = strat.symbol.replace(/USDT$/i, '').trim();
+                    const tfData = tfDataMap[symClean] || multiTimeframeService.getCached(symClean);
+                    const c5m = tfData?.candles?.['5m'];
+                    const c15m = tfData?.candles?.['15m'];
+                    const c1h = tfData?.candles?.['1h'];
+                    const c4h = tfData?.candles?.['4h'];
+                    const c1d = tfData?.candles?.['1d'];
+                    const isMultiExpanded = !!expandedMultitemporal[String(strat.id)];
+
                     return (
-                      <tr 
-                        onClick={() => onSelectStrategy && onSelectStrategy(strat)}
-                        className={`transition-colors duration-200 cursor-pointer border-b-2 border-slate-800 ${
-                          operational.isTriggerZoneActive
-                            ? 'bg-cyan-950/40 hover:bg-cyan-950/60'
-                            : idx === 0 
-                            ? 'bg-amber-950/15 hover:bg-emerald-950/40' 
-                            : 'hover:bg-slate-900/80 bg-slate-950/40'
-                        }`}
-                      >
-                        {/* Cols 1 to 7: Reglas del Trading (En el espacio bajo Rank hasta Nominal) */}
-                        <td colSpan={7} className="py-2.5 px-3 border-r border-slate-800 bg-slate-950/95 font-sans border-t-0 align-middle">
-                          <div className="flex items-center gap-2.5 flex-wrap">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/90 border border-cyan-500/60 text-cyan-300 font-mono font-black text-[10px] uppercase tracking-wider shadow-sm shrink-0">
-                              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-                              <span>Reglas del Trading</span>
-                            </span>
-                            <span className="text-slate-200 text-xs font-semibold leading-relaxed">
-                              {strat.tacticalRules || 'Mover SL a Breakeven al alcanzar TP1. Cerrar 50% en TP1 para asegurar ganancia.'}
-                            </span>
-                            {strat.tradeDiscipline && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/50 text-purple-300 text-[10px] font-mono shrink-0 shadow-xs">
-                                <span>⚡</span>
-                                <span>{strat.tradeDiscipline}</span>
+                      <React.Fragment key={`subrows-${strat.id}`}>
+                        <tr 
+                          onClick={() => onSelectStrategy && onSelectStrategy(strat)}
+                          className={`transition-colors duration-200 cursor-pointer border-b-2 border-slate-800 ${
+                            operational.isTriggerZoneActive
+                              ? 'bg-cyan-950/40 hover:bg-cyan-950/60'
+                              : idx === 0 
+                              ? 'bg-amber-950/15 hover:bg-emerald-950/40' 
+                              : 'hover:bg-slate-900/80 bg-slate-950/40'
+                          }`}
+                        >
+                          {/* Cols 1 to 5: Reglas del Trading (En el espacio bajo Rank hasta Apalancamiento) */}
+                          <td colSpan={5} className="py-2.5 px-3 border-r border-slate-800 bg-slate-950/95 font-sans border-t-0 align-middle">
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/90 border border-cyan-500/60 text-cyan-300 font-mono font-black text-[10px] uppercase tracking-wider shadow-sm shrink-0">
+                                <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                                <span>Reglas del Trading</span>
                               </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Cols 8 to 13: ONE Single Continuous Price Line ANCHORED to the bottom of the cells */}
-                        <td colSpan={6} className="pt-1 pb-8 px-3 border-r border-slate-800 bg-slate-950/95 font-mono border-t-0">
-                          <div className="relative w-full pt-0 pb-0">
-                            {/* UNA SOLA LÍNEA DE PRECIO CONTINUA MÁS ANCHA CON LÍNEAS DE SEPARACIÓN */}
-                            <div className="relative w-full h-8 rounded-full overflow-hidden flex border-2 border-slate-700/90 bg-slate-900 shadow-inner">
-                              {/* Red Segment (Stop Loss) - Estrecho, alineado con columna SL */}
-                              <div className="w-11 shrink-0 h-full bg-gradient-to-r from-rose-950 via-rose-900 to-rose-850/90 border-r border-rose-500/40 flex items-center justify-center text-[9px] font-black text-rose-200/90 tracking-tighter select-none z-10">
-                                {getBeDiffPctStr(slPrice)}
-                              </div>
-
-                              {/* Cyan/Blue Segments (DCA E3, E2, E1) - flex-1 con líneas de separación limpias */}
-                              <div className="flex-1 h-full bg-cyan-950/60 border-r border-cyan-500/30" />
-                              <div className="flex-1 h-full bg-sky-950/60 border-r border-cyan-500/30" />
-                              <div className="flex-1 h-full bg-blue-950/70 border-r border-cyan-500/50" />
-
-                              {/* Green Segments (Take Profit TP1, TP2, TP3) - flex-1 con porcentaje desde BE hacia cada TP */}
-                              <div className="flex-1 h-full bg-emerald-950/50 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
-                                {getBeDiffPctStr(tp1Data?.price)}
-                              </div>
-                              <div className="flex-1 h-full bg-emerald-950/70 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
-                                {getBeDiffPctStr(tp2Data?.price)}
-                              </div>
-                              <div className="flex-1 h-full bg-emerald-900/80 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
-                                {getBeDiffPctStr(tp3Data?.price)}
-                              </div>
-
-                              {/* Línea horizontal central de separación / riel guía */}
-                              <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-[1px] bg-slate-500/25 pointer-events-none z-0" />
-
-                              {/* BARRA HORIZONTAL DE RELLENO DEL PRECIO LIVE CON MOVIMIENTO DIRECCIONAL */}
-                              {posPct >= refEntryPosPct ? (
-                                <div 
-                                  className="absolute top-0 bottom-0 transition-all duration-300 pointer-events-none z-20 overflow-hidden"
-                                  style={{ 
-                                    left: `${refEntryPosPct}%`, 
-                                    width: `${Math.max(1, posPct - refEntryPosPct)}%` 
-                                  }}
-                                >
-                                  {/* Fondo degradado esmeralda */}
-                                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/50 via-emerald-400/60 to-emerald-200/90 shadow-[inset_0_0_12px_rgba(52,211,153,0.6)]" />
-                                  {/* Flujo animado de líneas diagonales hacia la derecha */}
-                                  <div className="absolute inset-0 animate-flow-bar-right opacity-70" />
-                                  {/* Micro flechas direccionales hacia la derecha */}
-                                  <div className="absolute inset-0 flex items-center justify-around overflow-hidden opacity-60 text-[11px] font-black text-white select-none animate-directional-right">
-                                    <span>›</span><span>›</span><span>›</span><span>›</span>
-                                  </div>
-                                  {/* Cursor iluminado con ping en el extremo derecho */}
-                                  <div className="absolute right-0 top-0 bottom-0 w-[4px] bg-white shadow-[0_0_16px_#34d399] z-10 flex items-center justify-center">
-                                    <span className="absolute -right-1 text-[8px] text-white font-black animate-directional-right">▶</span>
-                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping absolute" />
-                                  </div>
-                                </div>
-                              ) : (
-                                <div 
-                                  className="absolute top-0 bottom-0 transition-all duration-300 pointer-events-none z-20 overflow-hidden"
-                                  style={{ 
-                                    left: `${posPct}%`, 
-                                    width: `${Math.max(1, refEntryPosPct - posPct)}%` 
-                                  }}
-                                >
-                                  {/* Fondo degradado rosa/rojo */}
-                                  <div className="absolute inset-0 bg-gradient-to-r from-rose-200/90 via-rose-400/60 to-rose-500/50 shadow-[inset_0_0_12px_rgba(244,63,94,0.6)]" />
-                                  {/* Flujo animado de líneas diagonales hacia la izquierda */}
-                                  <div className="absolute inset-0 animate-flow-bar-left opacity-70" />
-                                  {/* Micro flechas direccionales hacia la izquierda */}
-                                  <div className="absolute inset-0 flex items-center justify-around overflow-hidden opacity-60 text-[11px] font-black text-white select-none animate-directional-left">
-                                    <span>‹</span><span>‹</span><span>‹</span><span>‹</span>
-                                  </div>
-                                  {/* Cursor iluminado con ping en el extremo izquierdo */}
-                                  <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-white shadow-[0_0_16px_#f43f5e] z-10 flex items-center justify-center">
-                                    <span className="absolute -left-1 text-[8px] text-white font-black animate-directional-left">◀</span>
-                                    <span className="w-2.5 h-2.5 rounded-full bg-rose-300 animate-ping absolute" />
-                                  </div>
-                                </div>
+                              <span className="text-slate-200 text-xs font-semibold leading-relaxed">
+                                {strat.tacticalRules || 'Mover SL a Breakeven al alcanzar TP1. Cerrar 50% en TP1 para asegurar ganancia.'}
+                              </span>
+                              {strat.tradeDiscipline && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/50 text-purple-300 text-[10px] font-mono shrink-0 shadow-xs">
+                                  <span>⚡</span>
+                                  <span>{strat.tradeDiscipline}</span>
+                                </span>
                               )}
                             </div>
+                          </td>
 
-                            {/* LÍNEA DE REFERENCIA DE ENTRADA (E1 o BE Global) SIN ETIQUETA DE PNL */}
-                            {refEntryPrice > 0 && (
-                              <div 
-                                className="absolute top-0 bottom-0 -translate-x-1/2 z-25 flex items-center justify-center pointer-events-none h-8"
-                                style={{ left: `${refEntryPosPct}%` }}
-                              >
-                                {/* Línea divisoria vertical a toda la altura de la barra */}
-                                <div className={`w-[2.5px] h-8 ${hasDcaActive ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.9)]' : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]'}`} />
-                              </div>
-                            )}
-
-                            {/* Etiqueta flotante de precio LIVE y dirección posicionada sobre el límite de llenado de la barra (DEBAJO de la barra para no tapar celdas) */}
-                            <div 
-                              className="absolute top-0 bottom-0 -translate-x-1/2 transition-all duration-300 z-30 flex items-center justify-center pointer-events-none whitespace-nowrap h-8"
-                              style={{ left: `${Math.max(10, Math.min(90, posPct))}%` }}
-                            >
-                              {/* Etiqueta flotante de precio LIVE y dirección posicionada de forma absoluta DEBAJO de la barra */}
-                              <div className={`absolute top-full mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-xl border backdrop-blur-md transition-all ${
-                                isAdvancing
-                                  ? 'bg-slate-950/95 text-emerald-300 border-emerald-400 shadow-emerald-500/40 ring-1 ring-emerald-500/40'
-                                  : 'bg-slate-950/95 text-rose-300 border-rose-400 shadow-rose-500/40 ring-1 ring-rose-500/40'
-                              }`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${isAdvancing ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`} />
-                                <span>LIVE: {formatPrice(currentPrice)}</span>
-                                <span className={`font-black text-[10px] tracking-wider inline-flex items-center gap-0.5 ${
-                                  isAdvancing ? 'text-emerald-300 animate-directional-right' : 'text-rose-300 animate-directional-left'
-                                }`}>
-                                  {isAdvancing ? '►►►' : '◄◄◄'}
+                          {/* Cols 8 to 13: ONE Single Continuous Price Line ANCHORED to the bottom of the cells */}
+                          <td colSpan={6} className="pt-2 pb-8 px-3 border-r border-slate-800 bg-slate-950/95 font-mono border-t-0">
+                            {/* Franja Superior Multitemporal Integrada (PUB ➔ 5m ➔ 15m ➔ 1h ➔ 4h ➔ Diario) */}
+                            <div className="flex items-center justify-between gap-1.5 mb-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                                  <span>Multitemporal:</span>
                                 </span>
+                                {/* Mini cápsulas de temporalidad en la secuencia exacta */}
+                                <div className="flex items-center gap-1 text-[9px] font-mono font-bold">
+                                  <span 
+                                    title={`PUB (Publicación): ${liveVsEntryPct >= 0 ? '+' : ''}${liveVsEntryPct.toFixed(1)}%`}
+                                    className={`px-1.5 py-0.5 rounded border ${isAdvancing ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300'}`}
+                                  >
+                                    PUB {liveVsEntryPct >= 0 ? '+' : ''}{liveVsEntryPct.toFixed(1)}%
+                                  </span>
+                                  <span className="text-slate-600 font-normal">➔</span>
+                                  <span 
+                                    title="Vela 5M"
+                                    className={`px-1.5 py-0.5 rounded border ${c5m ? (c5m.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-slate-900 border-slate-700 text-slate-400'}`}
+                                  >
+                                    5m {c5m ? (c5m.changePercent >= 0 ? '+' : '') + c5m.changePercent.toFixed(1) + '%' : ''}
+                                  </span>
+                                  <span className="text-slate-600 font-normal">➔</span>
+                                  <span 
+                                    title="Vela 15M"
+                                    className={`px-1.5 py-0.5 rounded border ${c15m ? (c15m.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-slate-900 border-slate-700 text-slate-400'}`}
+                                  >
+                                    15m {c15m ? (c15m.changePercent >= 0 ? '+' : '') + c15m.changePercent.toFixed(1) + '%' : ''}
+                                  </span>
+                                  <span className="text-slate-600 font-normal">➔</span>
+                                  <span 
+                                    title="Vela 1H"
+                                    className={`px-1.5 py-0.5 rounded border ${c1h ? (c1h.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-slate-900 border-slate-700 text-slate-400'}`}
+                                >
+                                    1h {c1h ? (c1h.changePercent >= 0 ? '+' : '') + c1h.changePercent.toFixed(1) + '%' : ''}
+                                  </span>
+                                  <span className="text-slate-600 font-normal">➔</span>
+                                  <span 
+                                    title="Vela 4H"
+                                    className={`px-1.5 py-0.5 rounded border ${c4h ? (c4h.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-slate-900 border-slate-700 text-slate-400'}`}
+                                  >
+                                    4h {c4h ? (c4h.changePercent >= 0 ? '+' : '') + c4h.changePercent.toFixed(1) + '%' : ''}
+                                  </span>
+                                  <span className="text-slate-600 font-normal">➔</span>
+                                  <span 
+                                    title="Vela DIARIO (Escala Rectora)"
+                                    className={`px-1.5 py-0.5 rounded border ${c1d ? (c1d.changePercent >= 0 ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-rose-950/80 border-rose-500/50 text-rose-300') : 'bg-amber-950/80 border-amber-500/50 text-amber-300'}`}
+                                  >
+                                    1D {c1d ? (c1d.changePercent >= 0 ? '+' : '') + c1d.changePercent.toFixed(1) + '%' : ''}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Botón para expandir/colapsar la escala multitemporal completa */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMultitemporal(strat.id);
+                                }}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-mono font-extrabold uppercase transition-all cursor-pointer shadow-xs border ${
+                                  isMultiExpanded
+                                    ? 'bg-cyan-400 text-slate-950 border-cyan-300 shadow-cyan-400/40'
+                                    : 'bg-slate-900 text-cyan-300 border-cyan-500/50 hover:bg-cyan-950/80 hover:border-cyan-400'
+                                }`}
+                                title="Ver gráfica multitemporal con velas PUB, 5m, 15m, 1h, 4h y Diario con uniones fractales"
+                              >
+                                <Activity className="w-3.5 h-3.5" />
+                                <span>{isMultiExpanded ? 'Ocultar Gráfica' : 'Ver Multitemporal'}</span>
+                                {isMultiExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+
+                            <div className="relative w-full pt-0 pb-0">
+                              {/* UNA SOLA LÍNEA DE PRECIO CONTINUA MÁS ANCHA CON LÍNEAS DE SEPARACIÓN */}
+                              <div className="relative w-full h-8 rounded-full overflow-hidden flex border-2 border-slate-700/90 bg-slate-900 shadow-inner">
+                                {/* Red Segment (Stop Loss) - Estrecho, alineado con columna SL */}
+                                <div className="w-11 shrink-0 h-full bg-gradient-to-r from-rose-950 via-rose-900 to-rose-850/90 border-r border-rose-500/40 flex items-center justify-center text-[9px] font-black text-rose-200/90 tracking-tighter select-none z-10">
+                                  {getBeDiffPctStr(slPrice)}
+                                </div>
+
+                                {/* Cyan/Blue Segments (DCA E3, E2, E1) - flex-1 con líneas de separación limpias */}
+                                <div className="flex-1 h-full bg-cyan-950/60 border-r border-cyan-500/30" />
+                                <div className="flex-1 h-full bg-sky-950/60 border-r border-cyan-500/30" />
+                                <div className="flex-1 h-full bg-blue-950/70 border-r border-cyan-500/50" />
+
+                                {/* Green Segments (Take Profit TP1, TP2, TP3) - flex-1 con porcentaje desde BE hacia cada TP */}
+                                <div className="flex-1 h-full bg-emerald-950/50 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
+                                  {getBeDiffPctStr(tp1Data?.price)}
+                                </div>
+                                <div className="flex-1 h-full bg-emerald-950/70 border-r border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
+                                  {getBeDiffPctStr(tp2Data?.price)}
+                                </div>
+                                <div className="flex-1 h-full bg-emerald-900/80 flex items-center justify-center text-[10px] font-black text-emerald-200/90 tracking-tight select-none z-10">
+                                  {getBeDiffPctStr(tp3Data?.price)}
+                                </div>
+
+                                {/* Línea horizontal central de separación / riel guía */}
+                                <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-[1px] bg-slate-500/25 pointer-events-none z-0" />
+
+                                {/* BARRA HORIZONTAL DE RELLENO DEL PRECIO LIVE CON MOVIMIENTO DIRECCIONAL */}
+                                {posPct >= refEntryPosPct ? (
+                                  <div 
+                                    className="absolute top-0 bottom-0 transition-all duration-300 pointer-events-none z-20 overflow-hidden"
+                                    style={{ 
+                                      left: `${refEntryPosPct}%`, 
+                                      width: `${Math.max(1, posPct - refEntryPosPct)}%` 
+                                    }}
+                                  >
+                                    {/* Fondo degradado esmeralda */}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/50 via-emerald-400/60 to-emerald-200/90 shadow-[inset_0_0_12px_rgba(52,211,153,0.6)]" />
+                                    {/* Flujo animado de líneas diagonales hacia la derecha */}
+                                    <div className="absolute inset-0 animate-flow-bar-right opacity-70" />
+                                    {/* Micro flechas direccionales hacia la derecha */}
+                                    <div className="absolute inset-0 flex items-center justify-around overflow-hidden opacity-60 text-[11px] font-black text-white select-none animate-directional-right">
+                                      <span>›</span><span>›</span><span>›</span><span>›</span>
+                                    </div>
+                                    {/* Cursor iluminado con ping en el extremo derecho */}
+                                    <div className="absolute right-0 top-0 bottom-0 w-[4px] bg-white shadow-[0_0_16px_#34d399] z-10 flex items-center justify-center">
+                                      <span className="absolute -right-1 text-[8px] text-white font-black animate-directional-right">▶</span>
+                                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping absolute" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div 
+                                    className="absolute top-0 bottom-0 transition-all duration-300 pointer-events-none z-20 overflow-hidden"
+                                    style={{ 
+                                      left: `${posPct}%`, 
+                                      width: `${Math.max(1, refEntryPosPct - posPct)}%` 
+                                    }}
+                                  >
+                                    {/* Fondo degradado rosa/rojo */}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-rose-200/90 via-rose-400/60 to-rose-500/50 shadow-[inset_0_0_12px_rgba(244,63,94,0.6)]" />
+                                    {/* Flujo animado de líneas diagonales hacia la izquierda */}
+                                    <div className="absolute inset-0 animate-flow-bar-left opacity-70" />
+                                    {/* Micro flechas direccionales hacia la izquierda */}
+                                    <div className="absolute inset-0 flex items-center justify-around overflow-hidden opacity-60 text-[11px] font-black text-white select-none animate-directional-left">
+                                      <span>‹</span><span>‹</span><span>‹</span><span>‹</span>
+                                    </div>
+                                    {/* Cursor iluminado con ping en el extremo izquierdo */}
+                                    <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-white shadow-[0_0_16px_#f43f5e] z-10 flex items-center justify-center">
+                                      <span className="absolute -left-1 text-[8px] text-white font-black animate-directional-left">◀</span>
+                                      <span className="w-2.5 h-2.5 rounded-full bg-rose-300 animate-ping absolute" />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* LÍNEA DE REFERENCIA DE ENTRADA (E1 o BE Global) SIN ETIQUETA DE PNL */}
+                              {refEntryPrice > 0 && (
+                                <div 
+                                  className="absolute top-0 bottom-0 -translate-x-1/2 z-25 flex items-center justify-center pointer-events-none h-8"
+                                  style={{ left: `${refEntryPosPct}%` }}
+                                >
+                                  {/* Línea divisoria vertical a toda la altura de la barra */}
+                                  <div className={`w-[2.5px] h-8 ${hasDcaActive ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.9)]' : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]'}`} />
+                                </div>
+                              )}
+
+                              {/* Etiqueta flotante de precio LIVE y dirección posicionada sobre el límite de llenado de la barra (DEBAJO de la barra para no tapar celdas) */}
+                              <div 
+                                className="absolute top-0 bottom-0 -translate-x-1/2 transition-all duration-300 z-30 flex items-center justify-center pointer-events-none whitespace-nowrap h-8"
+                                style={{ left: `${Math.max(10, Math.min(90, posPct))}%` }}
+                              >
+                                {/* Etiqueta flotante de precio LIVE y dirección posicionada de forma absoluta DEBAJO de la barra */}
+                                <div className={`absolute top-full mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-xl border backdrop-blur-md transition-all ${
+                                  isAdvancing
+                                    ? 'bg-slate-950/95 text-emerald-300 border-emerald-400 shadow-emerald-500/40 ring-1 ring-emerald-500/40'
+                                    : 'bg-slate-950/95 text-rose-300 border-rose-400 shadow-rose-500/40 ring-1 ring-rose-500/40'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${isAdvancing ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`} />
+                                  <span>LIVE: {formatPrice(currentPrice)}</span>
+                                  <span className={`font-black text-[10px] tracking-wider inline-flex items-center gap-0.5 ${
+                                    isAdvancing ? 'text-emerald-300 animate-directional-right' : 'text-rose-300 animate-directional-left'
+                                  }`}>
+                                    {isAdvancing ? '►►►' : '◄◄◄'}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
+
+                        {/* Fila Expandible: Gráfica Multitemporal Completa para la Oportunidad */}
+                        {isMultiExpanded && (
+                          <tr className="bg-slate-950 border-b-2 border-slate-800 transition-all">
+                            <td colSpan={11} className="p-3 sm:p-4 bg-slate-950/95">
+                              <div className="rounded-xl border border-cyan-500/40 bg-slate-950 p-2 sm:p-3 shadow-2xl">
+                                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 flex-wrap gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+                                    <span className="text-xs font-black uppercase text-cyan-300 font-mono tracking-wider">
+                                      Análisis Multitemporal de Precios: {symbolClean}/USDT
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      (Secuencia: PUB ➔ 5m ➔ 15m ➔ 1h ➔ 4h ➔ Diario)
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleMultitemporal(strat.id);
+                                    }}
+                                    className="text-[10px] font-mono text-slate-400 hover:text-white px-2.5 py-0.5 rounded bg-slate-900 border border-slate-700 cursor-pointer"
+                                  >
+                                    ✕ Cerrar
+                                  </button>
+                                </div>
+                                <HorizontalPriceScaleBar strategy={stratWithUpdatedTps as any} />
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })()}
                 </React.Fragment>
