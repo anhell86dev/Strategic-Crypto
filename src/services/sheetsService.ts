@@ -420,11 +420,29 @@ export class SheetsService {
       }
     }
 
-    // METHOD 3: Fallback to stored custom strategies
-    const stored = this.getStoredCustomData();
+    // METHOD 3: Fallback to stored custom strategies (solo si NO se forzó depuración explícita de datos)
+    if (!forcePurgeCache) {
+      const stored = this.getStoredCustomData();
+      if (stored.strategies.length > 0) {
+        return {
+          strategies: stored.strategies,
+          orders: stored.orders,
+          source: 'local_preset',
+          timestamp
+        };
+      }
+      return {
+        strategies: INITIAL_STRATEGIES,
+        orders: INITIAL_ORDERS,
+        source: 'local_preset',
+        timestamp
+      };
+    }
+
+    // Si se forzó depuración de caché y el documento de Google Sheets está vacío:
     return {
-      strategies: stored.strategies.length > 0 ? stored.strategies : INITIAL_STRATEGIES,
-      orders: stored.orders.length > 0 ? stored.orders : INITIAL_ORDERS,
+      strategies: [],
+      orders: [],
       source: 'local_preset',
       timestamp
     };
