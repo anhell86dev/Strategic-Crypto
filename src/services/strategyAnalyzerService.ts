@@ -1,5 +1,6 @@
 import { StrategyWithOrders, TrafficLightInfo } from '../types';
 import { calculateRiskReward } from '../utils/riskReward';
+import { indicatorsService } from './indicatorsService';
 
 export type HistoricalAnalysisStatus = 
   | 'INVALIDADO' // Tocó SL
@@ -468,18 +469,31 @@ export class StrategyAnalyzerService {
     }
 
     // 3. VERDE: No tocó SL, No tocó TP antes, está en la zona de las entradas / vigente
-    // Score compuesto para el Top 5: Mayor R:B y Menor distancia a la entrada E1
-    const proximityScore = Math.max(0, 100 - effectiveDistance * 18);
-    const rbScore = Math.min(100, riskRewardRatio * 22);
-    const rankScore = (rbScore * 0.6) + (proximityScore * 0.4);
+    // Score compuesto para el Top 5:
+    // 1. VÁLIDAS EN ZONA (Dentro de zona DCA o cercanía a entrada)
+    // 2. MEJOR R:B (Ratio Riesgo / Beneficio)
+    // 3. MEJOR CONFLUENCIA (Confluencia Multicapa / Indicadores)
+    const confluence = indicatorsService.getCompleteConfluence(strategy);
+    const confluenceScore = Math.max(0, Math.min(100, confluence.overallScore || 50));
+    
+    // Ponderación de Proximidad / En Zona DCA
+    const inZoneScore = (inDcaZone || confluence.operational.isTriggerZoneActive) 
+      ? 100 
+      : Math.max(0, 100 - effectiveDistance * 15);
+    
+    // Ponderación de R:B (Normalizado: R:B 1:4+ = 100 pts, R:B 1:2 = 50 pts)
+    const rbScore = Math.min(100, Math.max(0, (riskRewardRatio / 4.0) * 100));
+
+    // Score Combinado Ponderado: Confluencia (40%) + Mejor R:B (35%) + Válidas en Zona (25%)
+    const rankScore = (confluenceScore * 0.40) + (rbScore * 0.35) + (inZoneScore * 0.25);
 
     let detailReason = '';
     if (inDcaZone) {
-      detailReason = `En zona de entrada activa (entre E1 $${e1} y E3 $${e3}). SL intacto, TPs libres.`;
+      detailReason = `En zona DCA activa (entre E1 $${e1} y E3 $${e3}). R:B 1:${riskRewardRatio.toFixed(2)} · Confluencia ${confluenceScore}%.`;
     } else if (distToE1 <= 1.5) {
-      detailReason = `Muy cerca de entrada: a solo ${distToE1.toFixed(2)}% de E1 ($${e1}). R:B ${riskRewardRatio}:1.`;
+      detailReason = `Válida muy cerca de entrada (a ${distToE1.toFixed(2)}% de E1). R:B 1:${riskRewardRatio.toFixed(2)} · Confluencia ${confluenceScore}%.`;
     } else {
-      detailReason = `Válida: No ha tocado SL ni TP. A ${distToE1.toFixed(2)}% de E1 con R:B ${riskRewardRatio}:1.`;
+      detailReason = `Válida: No ha tocado SL ni TP. A ${distToE1.toFixed(2)}% de E1 con R:B 1:${riskRewardRatio.toFixed(2)} · Confluencia ${confluenceScore}%.`;
     }
 
     return {
@@ -500,7 +514,10 @@ export class StrategyAnalyzerService {
   }
 
   /**
-   * Returns the Top N strategies with VERDE traffic light, ordered by proximity to entry and highest R:B
+   * Returns the Top N strategies with VERDE traffic light, ordered by:
+   * 1. Válidas en Zona
+   * 2. Mejor R:B
+   * 3. Mejor Confluencia
    */
   public static getTopGreenStrategies(strategies: StrategyWithOrders[], limit = 5): StrategyWithOrders[] {
     return [...strategies]

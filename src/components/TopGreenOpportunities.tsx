@@ -39,9 +39,9 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
   onFilterGreen,
   isGreenFilterActive = false
 }) => {
-  // Local state for interactive investment, leverage, checked entry levels, editable entry prices per strategy
-  const [investments, setInvestments] = useState<Record<string, number>>({});
-  const [leverages, setLeverages] = useState<Record<string, number>>({});
+  // Local state for interactive per-entry investment ($), checked entry levels, editable entry prices per strategy
+  const [entryInvestments, setEntryInvestments] = useState<Record<string, { e1?: number; e2?: number; e3?: number }>>({});
+  const FIXED_LEVERAGE = 5;
   const [checkedEntries, setCheckedEntries] = useState<Record<string, { e1: boolean; e2: boolean; e3: boolean }>>({});
   const [customPrices, setCustomPrices] = useState<Record<string, { e1?: number; e2?: number; e3?: number; tp1?: number; tp2?: number; tp3?: number }>>({});
   const [customTpClosePcts, setCustomTpClosePcts] = useState<Record<string, { tp1?: number; tp2?: number; tp3?: number }>>({});
@@ -155,27 +155,51 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
     return `$${p.toFixed(6)}`;
   };
 
-  const getInvestment = (stratId: string | number) => investments[String(stratId)] ?? 100;
-  const getLeverage = (strat: StrategyWithOrders) => leverages[String(strat.id)] ?? (strat.leverage || 10);
+  const getEntryInvestment = (strat: StrategyWithOrders, level: 'e1' | 'e2' | 'e3'): number => {
+    const custom = entryInvestments[String(strat.id)]?.[level];
+    if (custom !== undefined && !isNaN(custom)) return custom;
+    const cap = strat.capitalAssigned && strat.capitalAssigned > 0 ? strat.capitalAssigned : 10;
+    if (level === 'e1') {
+      return strat.e1AllocationPercent ? Number((cap * (strat.e1AllocationPercent / 100)).toFixed(2)) : (cap >= 10 ? 5 : Number((cap * 0.5).toFixed(2)));
+    }
+    if (level === 'e2') {
+      return strat.e2AllocationPercent ? Number((cap * (strat.e2AllocationPercent / 100)).toFixed(2)) : (cap >= 10 ? 3 : Number((cap * 0.3).toFixed(2)));
+    }
+    if (level === 'e3') {
+      return strat.e3AllocationPercent ? Number((cap * (strat.e3AllocationPercent / 100)).toFixed(2)) : (cap >= 10 ? 2 : Number((cap * 0.2).toFixed(2)));
+    }
+    return 5;
+  };
 
-  // Apply First Row's Investment & Leverage to all rows
+  const handleEntryInvestmentChange = (stratId: string | number, level: 'e1' | 'e2' | 'e3', valStr: string) => {
+    const key = String(stratId);
+    const val = parseFloat(valStr);
+    setEntryInvestments(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        [level]: isNaN(val) || val < 0 ? 0 : val
+      }
+    }));
+  };
+
+  // Apply First Row's E1, E2, E3 Investments to all rows
   const handleApplyFirstRowToAll = () => {
     if (!topStrategies || topStrategies.length === 0) return;
     const firstStrat = topStrategies[0];
-    const firstInv = getInvestment(firstStrat.id);
-    const firstLev = getLeverage(firstStrat);
+    const firstE1 = getEntryInvestment(firstStrat, 'e1');
+    const firstE2 = getEntryInvestment(firstStrat, 'e2');
+    const firstE3 = getEntryInvestment(firstStrat, 'e3');
 
-    const newInvestments: Record<string, number> = {};
-    const newLeverages: Record<string, number> = {};
-
+    const newEntries: Record<string, { e1: number; e2: number; e3: number }> = {};
     topStrategies.forEach(strat => {
-      const idStr = String(strat.id);
-      newInvestments[idStr] = firstInv;
-      newLeverages[idStr] = firstLev;
+      newEntries[String(strat.id)] = {
+        e1: firstE1,
+        e2: firstE2,
+        e3: firstE3
+      };
     });
-
-    setInvestments(newInvestments);
-    setLeverages(newLeverages);
+    setEntryInvestments(newEntries);
   };
 
   const getRankBadge = (idx: number) => {
@@ -231,11 +255,11 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               </h3>
               <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950 border border-emerald-400 text-xs font-black text-emerald-300 uppercase tracking-wider font-mono shadow-sm">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                VÁLIDAS EN ZONA & MEJOR R:B
+                VÁLIDAS EN ZONA · MEJOR R:B · MEJOR CONFLUENCIA
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              Calculadora interactiva de dimensión de posición, gestión de riesgo en USD por nivel DCA y objetivos Take Profit.
+              Top 5 oportunidades clasificadas por <strong>Confluencia Técnica</strong> (40%), <strong>Ratio R:B</strong> (35%) y <strong>Activación en Zona DCA</strong> (25%).
             </p>
           </div>
         </div>
@@ -259,11 +283,11 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
           {/* Button: Sync / Copy Row #1 Values to All */}
           <button
             onClick={handleApplyFirstRowToAll}
-            title="Toma la Inversión y Apalancamiento de la Fila #1 y los aplica a las demás filas"
+            title="Toma las Inversiones $ (E1, E2, E3) de la Fila #1 y las aplica a las demás filas"
             className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center gap-2 cursor-pointer shadow-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/60 hover:border-amber-400 font-mono"
           >
             <Copy className="w-4 h-4 text-amber-400" />
-            <span>Copiar Inversión / Apal. de #1 a Todos</span>
+            <span>Copiar Inversiones $ de #1 a Todos</span>
           </button>
 
           {onFilterGreen && (
@@ -293,35 +317,20 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               <th rowSpan={2} className="py-1.5 px-2.5 border-r border-slate-800 w-60 max-w-[240px]">
                 Par / Dirección / Precio Live
               </th>
-              <th rowSpan={2} className="py-1.5 px-2 text-center w-24 border-r border-slate-800">
-                <div className="flex flex-col items-center gap-0.5">
-                  <span>Inversión ($)</span>
-                  <button 
-                    onClick={handleApplyFirstRowToAll}
-                    title="Aplicar #1 a todos"
-                    className="text-[9px] text-amber-300 hover:text-amber-200 underline cursor-pointer normal-case font-normal"
-                  >
-                    (Copiar #1)
-                  </button>
-                </div>
-              </th>
-              <th rowSpan={2} className="py-1.5 px-2 text-center w-20 border-r border-slate-800">
-                <div className="flex flex-col items-center gap-0.5">
-                  <span>Apal. (x)</span>
-                  <button 
-                    onClick={handleApplyFirstRowToAll}
-                    title="Aplicar #1 a todos"
-                    className="text-[9px] text-amber-300 hover:text-amber-200 underline cursor-pointer normal-case font-normal"
-                  >
-                    (Copiar #1)
-                  </button>
-                </div>
-              </th>
               <th rowSpan={2} className="py-1.5 px-2 w-32 border-r border-slate-800 text-center">Semáforo / Conf.</th>
 
               {/* Group 2: Entradas DCA */}
               <th colSpan={3} className="py-1.5 px-2 text-center text-cyan-300 bg-cyan-950/80 border-r border-b border-cyan-700/60">
-                Entradas DCA (Precio & Activos)
+                <div className="flex items-center justify-center gap-2">
+                  <span>Entradas DCA (Precio, Inv $ & Activos · 5x)</span>
+                  <button 
+                    onClick={handleApplyFirstRowToAll}
+                    title="Copiar Inversiones $ de #1 a todos"
+                    className="text-[10px] text-amber-300 hover:text-amber-200 underline cursor-pointer normal-case font-bold"
+                  >
+                    (Copiar Inv #1)
+                  </button>
+                </div>
               </th>
 
               {/* Group 3: Take Profit */}
@@ -333,22 +342,22 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
             {/* Sub-Headers Row 2 */}
             <tr className="border-b-2 border-emerald-500/40 text-[11px] font-black uppercase tracking-wider bg-slate-950">
               {/* DCA Sub-headers (inverted: E3, E2, E1) */}
-              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[90px]">
+              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[100px]">
                 <div className="flex flex-col items-center">
                   <span>E3</span>
-                  <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / act</span>
+                  <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / inv $ / act</span>
                 </div>
               </th>
-              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[90px]">
+              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-cyan-800/40 min-w-[100px]">
                 <div className="flex flex-col items-center">
                   <span>E2</span>
-                  <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / act</span>
+                  <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / inv $ / act</span>
                 </div>
               </th>
-              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800 min-w-[90px]">
+              <th className="py-1 px-1.5 text-center text-cyan-300 bg-cyan-950/40 border-r border-slate-800 min-w-[100px]">
                 <div className="flex flex-col items-center">
                   <span>E1</span>
-                  <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / act</span>
+                  <span className="text-[9px] text-cyan-400/90 font-normal lowercase tracking-normal">precio / inv $ / act</span>
                 </div>
               </th>
 
@@ -389,12 +398,10 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const confluence = indicatorsService.getCompleteConfluence(strat);
               const { futures, operational, overallScore, priorityBadge } = confluence;
 
-              // Investment, Leverage & Nominal calculations
-              const inv = getInvestment(strat.id);
-              const lev = getLeverage(strat);
-              const nominalTotal = inv * lev;
+              // Fixed Leverage: Always 5x
+              const lev = FIXED_LEVERAGE;
 
-              // Entry Allocations DCA
+              // Entry Allocations DCA & Individual Inversiones in $
               const stratCustoms = customPrices[String(strat.id)] || {};
 
               const pE1 = stratCustoms.e1 ?? (strat.entryPrice || currentPrice);
@@ -408,23 +415,19 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               const e2Pct = hasE2 ? (strat.e2AllocationPercent || 30) : 0;
               const e3Pct = hasE3 ? (strat.e3AllocationPercent || 20) : 0;
 
-              const defaultNominalE1 = nominalTotal * (e1Pct / 100);
-              const defaultNominalE2 = nominalTotal * (e2Pct / 100);
-              const defaultNominalE3 = nominalTotal * (e3Pct / 100);
+              // Inversión en $ individual por entrada
+              const invE1 = getEntryInvestment(strat, 'e1');
+              const invE2 = getEntryInvestment(strat, 'e2');
+              const invE3 = getEntryInvestment(strat, 'e3');
 
-              const assetsE1 = pE1 > 0 ? (defaultNominalE1 / pE1) : 0;
-              const assetsE2 = (hasE2 && pE2 > 0) ? (defaultNominalE2 / pE2) : 0;
-              const assetsE3 = (hasE3 && pE3 > 0) ? (defaultNominalE3 / pE3) : 0;
+              // Nominal y Activos calculados por entrada con apalancamiento fijo 5x
+              const nominalE1 = invE1 * lev;
+              const nominalE2 = hasE2 ? invE2 * lev : 0;
+              const nominalE3 = hasE3 ? invE3 * lev : 0;
 
-              const nominalE1 = defaultNominalE1;
-              const nominalE2 = defaultNominalE2;
-              const nominalE3 = defaultNominalE3;
-
-              const assetsE12 = assetsE1 + assetsE2;
-              const nominalE12 = nominalE1 + nominalE2;
-
-              const totalAssets = assetsE1 + assetsE2 + assetsE3;
-              const avgEntryPrice = totalAssets > 0 ? nominalTotal / totalAssets : pE1;
+              const assetsE1 = pE1 > 0 ? (nominalE1 / pE1) : 0;
+              const assetsE2 = (hasE2 && pE2 > 0) ? (nominalE2 / pE2) : 0;
+              const assetsE3 = (hasE3 && pE3 > 0) ? (nominalE3 / pE3) : 0;
 
               // Determinar en cuál Entrada (E1, E2 o E3) se encuentra el precio LIVE
               let liveActiveEntry: 'e1' | 'e2' | 'e3' | null = null;
@@ -448,15 +451,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
 
               // Loss calculations for Stop Loss
               const slPrice = strat.stopLoss || 0;
-              const lossE1 = isLong ? assetsE1 * (pE1 - slPrice) : assetsE1 * (slPrice - pE1);
-              
-              const lossE12 = isLong
-                ? (assetsE1 * (pE1 - slPrice)) + (assetsE2 * (pE2 - slPrice))
-                : (assetsE1 * (slPrice - pE1)) + (assetsE2 * (slPrice - pE2));
-
-              const lossFull = isLong
-                ? (assetsE1 * (pE1 - slPrice)) + (assetsE2 * (pE2 - slPrice)) + (assetsE3 * (pE3 - slPrice))
-                : (assetsE1 * (slPrice - pE1)) + (assetsE2 * (slPrice - pE2)) + (assetsE3 * (slPrice - pE3));
 
               // Checkbox state for active executed entries
               const checked = getChecked(strat.id);
@@ -464,21 +458,25 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
               // Calculate active accumulated position based on CHECKED entries
               let activeNominal = 0;
               let activeAssets = 0;
+              let activeInvestment = 0;
 
               if (checked.e1) {
                 activeNominal += nominalE1;
                 activeAssets += assetsE1;
+                activeInvestment += invE1;
               }
               if (checked.e2 && hasE2) {
                 activeNominal += nominalE2;
                 activeAssets += assetsE2;
+                activeInvestment += invE2;
               }
               if (checked.e3 && hasE3) {
                 activeNominal += nominalE3;
                 activeAssets += assetsE3;
+                activeInvestment += invE3;
               }
 
-              const activeAvgEntryPrice = activeAssets > 0 ? activeNominal / activeAssets : pE1;
+              const activeAvgEntryPrice = activeAssets > 0 ? (activeNominal / activeAssets) : pE1;
 
               // Active loss for checked position
               const activeLoss = isLong
@@ -871,44 +869,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       </div>
                     </td>
 
-                    {/* Inversión ($) */}
-                    <td rowSpan={2} className="py-1.5 px-2 text-center whitespace-nowrap border-r border-slate-800 align-top">
-                      <div className="flex items-center justify-center">
-                        <input
-                          type="number"
-                          min="1"
-                          max="100000"
-                          value={getInvestment(strat.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            const val = Math.max(1, parseFloat(e.target.value) || 0);
-                            setInvestments(prev => ({ ...prev, [String(strat.id)]: val }));
-                          }}
-                          className="w-20 px-2 py-1 bg-slate-900 border-2 border-emerald-500/70 focus:border-emerald-400 rounded-xl text-center font-mono font-black text-emerald-300 text-sm focus:ring-2 focus:ring-emerald-400 focus:outline-none shadow-lg"
-                        />
-                      </div>
-                    </td>
-
-                    {/* Apalancamiento (x) */}
-                    <td rowSpan={2} className="py-1.5 px-2 text-center whitespace-nowrap border-r border-slate-800 align-top">
-                      <div className="flex items-center justify-center">
-                        <input
-                          type="number"
-                          min="1"
-                          max="125"
-                          value={getLeverage(strat)}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            const val = Math.max(1, Math.min(125, parseInt(e.target.value) || 1));
-                            setLeverages(prev => ({ ...prev, [String(strat.id)]: val }));
-                          }}
-                          className="w-14 px-1.5 py-1 bg-slate-900 border-2 border-amber-500/70 focus:border-amber-400 rounded-xl text-center font-mono font-black text-amber-300 text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none shadow-lg"
-                        />
-                      </div>
-                    </td>
-
                     {/* Semáforo Verde & Resumen de Confluencia */}
                     <td rowSpan={2} className="py-1.5 px-2 whitespace-nowrap border-r border-slate-800 align-top w-32">
                       <div className="flex flex-col gap-1 items-center">
@@ -965,12 +925,22 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                       </div>
                     </td>
 
-                    {/* DCA E3 (Solo Precio y Activos con Checkbox) */}
-                    <td className={`py-2 px-2 text-center whitespace-nowrap border-r border-cyan-800/40 border-b-0 transition-all ${
+                    {/* DCA E3 (Precio, Inversión $ & Activos con Checkbox) */}
+                    <td className={`relative py-2 px-2 text-center whitespace-nowrap border-r border-cyan-800/40 border-b-0 transition-all ${
                       isE3Live
                         ? 'bg-cyan-500/25 ring-2 ring-cyan-400 ring-inset shadow-[0_0_20px_rgba(6,182,212,0.4)]'
                         : checked.e3 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
                     }`}>
+                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {stepMap.e3 && (
+                        <div 
+                          className="absolute top-0.5 right-0.5 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-cyan-400 text-cyan-200 font-mono shadow-lg shadow-black/80 ring-1 ring-cyan-400/50"
+                          title={`Paso #${stepMap.e3.step} ejecutado a las ${stepMap.e3.time}`}
+                        >
+                          <span className="text-xs sm:text-sm font-black text-cyan-300 leading-none">#{stepMap.e3.step}</span>
+                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.e3.time}</span>
+                        </div>
+                      )}
                       {hasE3 ? (
                         <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                           {/* Badge Iluminado de Precio LIVE */}
@@ -1007,33 +977,48 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               title="Precio E3 ($)"
                             />
                           </div>
-                          {/* Fila 2: Cantidad de Activos (No modificable) */}
+                          {/* Fila 2: Inversión en $ Asignada */}
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="text-[10px] font-bold text-amber-300/90 font-mono">Inv $:</span>
+                            <input
+                              type="number"
+                              min="0.1"
+                              step="any"
+                              value={invE3}
+                              onChange={(e) => handleEntryInvestmentChange(strat.id, 'e3', e.target.value)}
+                              className="w-16 px-1 py-0.5 text-xs text-center font-bold font-mono rounded border bg-slate-900 text-amber-300 border-amber-500/70 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 shadow-xs"
+                              title="Inversión en $ asignada a E3"
+                            />
+                          </div>
+                          {/* Fila 3: Cantidad de Activos */}
                           <div className="flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/60 shadow-xs">
                             <span className="text-[10px] font-bold uppercase font-mono text-cyan-400/90">Act:</span>
                             <span className="text-[11px] font-bold font-mono text-emerald-300">
                               {assetsE3 > 0 ? (assetsE3 < 1 ? assetsE3.toFixed(4) : assetsE3.toFixed(2)) : '--'}
                             </span>
                           </div>
-                          {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
-                          {stepMap.e3 && (
-                            <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs">
-                              <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                              <span className="text-slate-100 font-black">#{stepMap.e3.step}</span>
-                              <span>{stepMap.e3.time}</span>
-                            </div>
-                          )}
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs">--</span>
                       )}
                     </td>
 
-                    {/* DCA E2 (Solo Precio y Activos con Checkbox) */}
-                    <td className={`py-2 px-2 text-center whitespace-nowrap border-r border-cyan-800/40 border-b-0 transition-all ${
+                    {/* DCA E2 (Precio, Inversión $ & Activos con Checkbox) */}
+                    <td className={`relative py-2 px-2 text-center whitespace-nowrap border-r border-cyan-800/40 border-b-0 transition-all ${
                       isE2Live
                         ? 'bg-cyan-500/25 ring-2 ring-cyan-400 ring-inset shadow-[0_0_20px_rgba(6,182,212,0.4)]'
                         : checked.e2 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
                     }`}>
+                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {stepMap.e2 && (
+                        <div 
+                          className="absolute top-0.5 right-0.5 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-cyan-400 text-cyan-200 font-mono shadow-lg shadow-black/80 ring-1 ring-cyan-400/50"
+                          title={`Paso #${stepMap.e2.step} ejecutado a las ${stepMap.e2.time}`}
+                        >
+                          <span className="text-xs sm:text-sm font-black text-cyan-300 leading-none">#{stepMap.e2.step}</span>
+                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.e2.time}</span>
+                        </div>
+                      )}
                       {hasE2 ? (
                         <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                           {/* Badge Iluminado de Precio LIVE */}
@@ -1070,33 +1055,48 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                               title="Precio E2 ($)"
                             />
                           </div>
-                          {/* Fila 2: Cantidad de Activos (No modificable) */}
+                          {/* Fila 2: Inversión en $ Asignada */}
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="text-[10px] font-bold text-amber-300/90 font-mono">Inv $:</span>
+                            <input
+                              type="number"
+                              min="0.1"
+                              step="any"
+                              value={invE2}
+                              onChange={(e) => handleEntryInvestmentChange(strat.id, 'e2', e.target.value)}
+                              className="w-16 px-1 py-0.5 text-xs text-center font-bold font-mono rounded border bg-slate-900 text-amber-300 border-amber-500/70 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 shadow-xs"
+                              title="Inversión en $ asignada a E2"
+                            />
+                          </div>
+                          {/* Fila 3: Cantidad de Activos */}
                           <div className="flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/60 shadow-xs">
                             <span className="text-[10px] font-bold uppercase font-mono text-cyan-400/90">Act:</span>
                             <span className="text-[11px] font-bold font-mono text-emerald-300">
                               {assetsE2 > 0 ? (assetsE2 < 1 ? assetsE2.toFixed(4) : assetsE2.toFixed(2)) : '--'}
                             </span>
                           </div>
-                          {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
-                          {stepMap.e2 && (
-                            <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs">
-                              <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                              <span className="text-slate-100 font-black">#{stepMap.e2.step}</span>
-                              <span>{stepMap.e2.time}</span>
-                            </div>
-                          )}
                         </div>
                       ) : (
                         <span className="text-slate-500 font-mono text-xs">--</span>
                       )}
                     </td>
 
-                    {/* DCA E1 (Solo Precio y Activos con Checkbox) */}
-                    <td className={`py-2 px-2 text-center whitespace-nowrap border-r border-slate-800 border-b-0 transition-all ${
+                    {/* DCA E1 (Precio, Inversión $ & Activos con Checkbox) */}
+                    <td className={`relative py-2 px-2 text-center whitespace-nowrap border-r border-slate-800 border-b-0 transition-all ${
                       isE1Live
                         ? 'bg-cyan-500/25 ring-2 ring-cyan-400 ring-inset shadow-[0_0_20px_rgba(6,182,212,0.4)]'
                         : checked.e1 ? 'bg-cyan-950/30' : 'bg-slate-950/30 opacity-60'
                     }`}>
+                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {stepMap.e1 && (
+                        <div 
+                          className="absolute top-0.5 right-0.5 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-cyan-400 text-cyan-200 font-mono shadow-lg shadow-black/80 ring-1 ring-cyan-400/50"
+                          title={`Paso #${stepMap.e1.step} ejecutado a las ${stepMap.e1.time}`}
+                        >
+                          <span className="text-xs sm:text-sm font-black text-cyan-300 leading-none">#{stepMap.e1.step}</span>
+                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.e1.time}</span>
+                        </div>
+                      )}
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                         {/* Badge Iluminado de Precio LIVE */}
                         {isE1Live && (
@@ -1132,26 +1132,41 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             title="Precio E1 ($)"
                           />
                         </div>
-                        {/* Fila 2: Cantidad de Activos (No modificable) */}
+                        {/* Fila 2: Inversión en $ Asignada */}
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="text-[10px] font-bold text-amber-300/90 font-mono">Inv $:</span>
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="any"
+                            value={invE1}
+                            onChange={(e) => handleEntryInvestmentChange(strat.id, 'e1', e.target.value)}
+                            className="w-16 px-1 py-0.5 text-xs text-center font-bold font-mono rounded border bg-slate-900 text-amber-300 border-amber-500/70 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 shadow-xs"
+                            title="Inversión en $ asignada a E1"
+                          />
+                        </div>
+                        {/* Fila 3: Cantidad de Activos */}
                         <div className="flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/60 shadow-xs">
                           <span className="text-[10px] font-bold uppercase font-mono text-cyan-400/90">Act:</span>
                           <span className="text-[11px] font-bold font-mono text-emerald-300">
                             {assetsE1 > 0 ? (assetsE1 < 1 ? assetsE1.toFixed(4) : assetsE1.toFixed(2)) : '--'}
                           </span>
                         </div>
-                        {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
-                        {stepMap.e1 && (
-                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-100 font-black">#{stepMap.e1.step}</span>
-                            <span>{stepMap.e1.time}</span>
-                          </div>
-                        )}
                       </div>
                     </td>
 
                     {/* TP1 (Precio Editable + % de Ganancia Editable + USD Profit) */}
-                    <td rowSpan={2} className="py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
+                    <td rowSpan={2} className="relative py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
+                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {stepMap.tp1 && (
+                        <div 
+                          className="absolute top-1 right-1 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-emerald-400 text-emerald-200 font-mono shadow-lg shadow-black/80 ring-1 ring-emerald-400/50"
+                          title={`Paso #${stepMap.tp1.step} ejecutado a las ${stepMap.tp1.time}`}
+                        >
+                          <span className="text-xs sm:text-sm font-black text-emerald-300 leading-none">#{stepMap.tp1.step}</span>
+                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.tp1.time}</span>
+                        </div>
+                      )}
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                         {/* Fila 1: Precio TP1 Editable */}
                         <div className="flex items-center justify-center gap-1">
@@ -1188,20 +1203,21 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             +${tp1Data.profit.toFixed(1)}
                           </span>
                         )}
-
-                        {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
-                        {stepMap.tp1 && (
-                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs mt-0.5">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-100 font-black">#{stepMap.tp1.step}</span>
-                            <span>{stepMap.tp1.time}</span>
-                          </div>
-                        )}
                       </div>
                     </td>
 
                     {/* TP2 (Precio Editable + % de Activos Editable + USD Profit) */}
-                    <td rowSpan={2} className="py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
+                    <td rowSpan={2} className="relative py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 border-r border-emerald-800/40 font-mono align-middle">
+                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {stepMap.tp2 && (
+                        <div 
+                          className="absolute top-1 right-1 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-emerald-400 text-emerald-200 font-mono shadow-lg shadow-black/80 ring-1 ring-emerald-400/50"
+                          title={`Paso #${stepMap.tp2.step} ejecutado a las ${stepMap.tp2.time}`}
+                        >
+                          <span className="text-xs sm:text-sm font-black text-emerald-300 leading-none">#{stepMap.tp2.step}</span>
+                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.tp2.time}</span>
+                        </div>
+                      )}
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                         {/* Fila 1: Precio TP2 Editable */}
                         <div className="flex items-center justify-center gap-1">
@@ -1238,20 +1254,21 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             +${tp2Data.profit.toFixed(1)}
                           </span>
                         )}
-
-                        {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
-                        {stepMap.tp2 && (
-                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs mt-0.5">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-100 font-black">#{stepMap.tp2.step}</span>
-                            <span>{stepMap.tp2.time}</span>
-                          </div>
-                        )}
                       </div>
                     </td>
 
                     {/* TP3 (Precio Editable + % de Activos Editable + USD Profit) */}
-                    <td rowSpan={2} className="py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 font-mono align-middle">
+                    <td rowSpan={2} className="relative py-2 px-2 text-center whitespace-nowrap bg-emerald-950/20 font-mono align-middle">
+                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {stepMap.tp3 && (
+                        <div 
+                          className="absolute top-1 right-1 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-emerald-400 text-emerald-200 font-mono shadow-lg shadow-black/80 ring-1 ring-emerald-400/50"
+                          title={`Paso #${stepMap.tp3.step} ejecutado a las ${stepMap.tp3.time}`}
+                        >
+                          <span className="text-xs sm:text-sm font-black text-emerald-300 leading-none">#{stepMap.tp3.step}</span>
+                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.tp3.time}</span>
+                        </div>
+                      )}
                       <div className="flex flex-col items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                         {/* Fila 1: Precio TP3 Editable */}
                         <div className="flex items-center justify-center gap-1">
@@ -1288,15 +1305,6 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                             +${tp3Data.profit.toFixed(1)}
                           </span>
                         )}
-
-                        {/* Badge Gris: Check, Paso Numérico y Hora de Ejecución */}
-                        {stepMap.tp3 && (
-                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold shadow-xs mt-0.5">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-100 font-black">#{stepMap.tp3.step}</span>
-                            <span>{stepMap.tp3.time}</span>
-                          </div>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -1307,19 +1315,22 @@ export const TopGreenOpportunities: React.FC<TopGreenOpportunitiesProps> = ({
                     className="transition-colors duration-200 cursor-pointer bg-slate-950/40"
                   >
                     {/* Celda 1 (Bajo DCA E3): "SL GLOBAL" */}
-                    <td className="py-1 px-1.5 text-center bg-rose-950/40 border-r border-rose-900/40 border-t border-rose-900/40 font-mono">
+                    <td className="relative py-1 px-1.5 text-center bg-rose-950/40 border-r border-rose-900/40 border-t border-rose-900/40 font-mono">
+                      {/* Badge de Paso Tocado en Esquina Superior con Número Grande */}
+                      {stepMap.sl && (
+                        <div 
+                          className="absolute top-0.5 right-0.5 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-950/95 border-2 border-rose-400 text-rose-200 font-mono shadow-lg shadow-black/80 ring-1 ring-rose-400/50"
+                          title={`Paso #${stepMap.sl.step} ejecutado a las ${stepMap.sl.time}`}
+                        >
+                          <span className="text-xs sm:text-sm font-black text-rose-300 leading-none">#{stepMap.sl.step}</span>
+                          <span className="text-[9px] font-bold text-slate-300 leading-none">{stepMap.sl.time}</span>
+                        </div>
+                      )}
                       <div className="flex flex-col items-center justify-center gap-0.5">
                         <div className="flex items-center justify-center gap-1 text-[10px] font-black text-rose-300 uppercase tracking-wider">
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0" />
                           <span>SL GLOBAL</span>
                         </div>
-                        {stepMap.sl && (
-                          <div className="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-300 font-mono text-[8.5px] font-bold shadow-xs">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-100 font-black">#{stepMap.sl.step}</span>
-                            <span>{stepMap.sl.time}</span>
-                          </div>
-                        )}
                       </div>
                     </td>
 
